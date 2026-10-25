@@ -1,0 +1,34 @@
+# HTTPS for the portal. DOMAIN and ACME_EMAIL come from .env.production.
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+	# Request size cap (photos are shrunk in the browser before upload).
+	request_body {
+		max_size 8MB
+	}
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	}
+	# The app trusts X-Real-IP only behind this proxy (TRUST_PROXY=1) for per-address limits.
+	reverse_proxy app:3000 {
+		header_up X-Real-IP {remote_host}
+	}
+	# Booking links in logs are private: keep the token out of access logs.
+	log {
+		format filter {
+			wrap json
+			fields {
+				request>uri regexp "^/(pay|invoice|api/public/bookings)/[A-Za-z0-9_-]+" "/${1}/…"
+				request>headers>Cookie delete
+			}
+		}
+	}
+}
+
+www.{$DOMAIN} {
+	redir https://{$DOMAIN}{uri} permanent
+}

@@ -1,0 +1,51 @@
+# GSA badminton portal on one Hostinger KVM VPS.
+#   app    the portal (Next.js); everything it stores is in the gsa-data volume
+#   caddy  HTTPS with free automatic Let's Encrypt certificates, HTTP → HTTPS
+#
+# First start / update:  docker compose up -d --build
+# Logs:                  docker compose logs -f app
+# First admin password:  docker compose exec app cat /data/FIRST_LOGIN.txt
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env.production
+    environment:
+      - TRUST_PROXY=1
+    volumes:
+      - gsa-data:/data
+    expose:
+      - "3000"
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 256
+    stop_grace_period: 20s
+    logging: &logging
+      driver: json-file
+      options: { max-size: "10m", max-file: "5" }
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    env_file: .env.production
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy:/etc/caddy:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    cap_drop: [ALL]
+    cap_add: [NET_BIND_SERVICE]
+    security_opt: ["no-new-privileges:true"]
+    depends_on: [app]
+    logging: *logging
+
+volumes:
+  gsa-data:
+  caddy-data:
+  caddy-config:

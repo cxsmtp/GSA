@@ -1,0 +1,108 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/unbounded';
+@import '@fontsource-variable/inter';
+
+/*
+ * "Night court": deep ink background, shuttlecock-neon lime for action, electric cyan and violet
+ * for energy. One accent (lime) means "tap me"; colours carry slot states consistently everywhere.
+ */
+@theme {
+  --font-display: 'Unbounded Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  --color-ink: #06070d;
+  --color-night: #0b0d18;
+  --color-panel: #12152a;
+  --color-panel-2: #1a1e38;
+  --color-line: #272c4f;
+  --color-text: #f3f5ff;
+  --color-soft: #b8bfe0;
+  --color-muted: #8189b3;
+  --color-lime: #c6ff00;
+  --color-lime-deep: #9bd400;
+  --color-cyan: #00e5ff;
+  --color-violet: #7c4dff;
+  --color-pink: #ff3d81;
+  --color-amber: #ffb020;
+  --color-ok: #22e39b;
+  --color-bad: #ff5470;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html {
+  -webkit-tap-highlight-color: transparent;
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-ink);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  min-height: 100dvh;
+  overflow-x: hidden;
+}
+
+/* Ambient glow behind every page. */
+.aurora {
+  position: fixed;
+  inset: -20vh -20vw auto;
+  height: 70vh;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(40% 50% at 15% 30%, color-mix(in oklab, var(--color-violet) 38%, transparent), transparent 70%),
+    radial-gradient(35% 45% at 85% 20%, color-mix(in oklab, var(--color-cyan) 22%, transparent), transparent 70%),
+    radial-gradient(30% 40% at 55% 0%, color-mix(in oklab, var(--color-lime) 16%, transparent), transparent 70%);
+  filter: blur(10px);
+}
+
+.court-lines {
+  background-image:
+    linear-gradient(to right, color-mix(in oklab, var(--color-text) 6%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in oklab, var(--color-text) 6%, transparent) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
+
+.glass {
+  background: color-mix(in oklab, var(--color-panel) 93%, transparent);
+  backdrop-filter: blur(16px) saturate(140%);
+  -webkit-backdrop-filter: blur(16px) saturate(140%);
+  border: 1px solid color-mix(in oklab, var(--color-text) 10%, transparent);
+}
+
+.text-gradient {
+  background: linear-gradient(92deg, var(--color-lime), var(--color-cyan) 55%, var(--color-violet));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.btn-lime {
+  background: var(--color-lime);
+  color: var(--color-ink);
+  box-shadow: 0 0 0 1px color-mix(in oklab, var(--color-lime) 60%, white), 0 10px 30px -8px color-mix(in oklab, var(--color-lime) 70%, transparent);
+}
+.btn-lime:hover { filter: brightness(1.06); }
+.btn-lime:disabled { filter: grayscale(0.8) brightness(0.6); box-shadow: none; }
+
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+@keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+.rise { animation: rise 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+
+@keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-lime) 55%, transparent); } 100% { box-shadow: 0 0 0 14px transparent; } }
+.pulse { animation: pulse-ring 1.6s ease-out infinite; }
+
+@keyframes shuttle { 0% { transform: translate(-10%, 10%) rotate(-20deg); } 50% { transform: translate(110%, -40%) rotate(25deg); } 100% { transform: translate(230%, 10%) rotate(70deg); } }
+
+:focus-visible { outline: 2px solid var(--color-cyan); outline-offset: 2px; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
+
+input, select, textarea { font-size: 16px; } /* no zoom-on-focus on iPhone */
