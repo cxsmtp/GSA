@@ -25,5 +25,17 @@ Settings → GST & bills. Not registered: receipts without tax. Regular: Tax Inv
 ## Instagram
 Settings → Instagram & links: copy the **bio / Book now** link into Instagram → Edit profile → Action buttons (or Links), and the Story link for link stickers. Download the QR poster for the counter. Bookings from each link are counted.
 
-## Team & security
-Settings → Team: add the coach (role **Coach**) — they get a one-time password and choose their own. Reset passwords, reset 2-step, deactivate. Settings → Audit & backup: every change, who did it, a tamper check, and a backup download.
+## Team, roles & cash
+Settings → Team: add staff with a role. Each gets a one-time password and chooses their own. The table there shows exactly what each role can do; the server enforces it on every action.
+
+| Role | Can |
+|---|---|
+| **Admin** | Everything: money, bill book, expenses, reports, courts & prices, settings, team. |
+| **Head coach** | Runs the day: bookings, phone bookings, WhatsApp confirmations, takes cash, edits notes, cancels unpaid bookings, blocks courts, edits the About page. Cash is on his name. |
+| **Junior coach** | Helps with reservations: sees the timetable and bookings, makes phone/walk-in bookings, sends WhatsApp confirmations, takes cash. Cannot change or cancel anything else. Pick the head coach he **reports to**. |
+
+**Cash custody.** Every cash payment records who took it. Cash taken by a head coach, or by a junior who reports to him, is **on the head coach's name**: the booking shows as paid at once, and the money is his responsibility until it reaches the academy.
+- Junior coach → **Cash** shows what he took and whose name it is on; he hands it to his head coach.
+- Head coach → **Cash** shows cash on his name; **Record a deposit** (bank deposit with slip number/photo, or handed to the admin).
+- Admin → Money → **Cash**: each person's balance, and deposits to confirm (**Received** / **Not received**). Only a confirmed deposit takes cash off the coach's name. A head coach with cash still on his name can't be deactivated or demoted until it is settled.
+- UPI taken at the desk by a coach still goes to Money → Verify, because it lands straight in the bank. Settings → Audit & backup: every change, who did it, a tamper check, and a backup download.

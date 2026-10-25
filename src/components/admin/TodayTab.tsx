@@ -7,6 +7,7 @@ import { fmtDate } from '@/lib/shared/time';
 import { BookingSheet } from './BookingSheet';
 import { StaffGrid } from './StaffGrid';
 import { Badge, Card, Spinner, Stat, useMe, useStaff } from './ui';
+import { can } from '@/lib/shared/rbac';
 
 interface Dash {
   today: string;
@@ -17,15 +18,18 @@ interface Dash {
   upcoming: number;
   threshold?: { turnover: number; threshold: number; pct: number; registered: boolean; fy: string };
   integrations?: { razorpay: boolean; whatsappApi: boolean; razorpayWebhook: boolean };
+  cashOnName?: number;
+  cashTakenToday?: number;
+  pendingDeposits?: number;
 }
 
-export function TodayTab({ go }: { go: (t: 'money' | 'bookings') => void }) {
+export function TodayTab({ go }: { go: (t: 'money' | 'bookings' | 'cash') => void }) {
   const me = useMe();
   const { data, loading, reload } = useStaff<Dash>('dashboard');
   const [openId, setOpenId] = useState<number | null>(null);
   if (loading && !data) return <Spinner />;
   if (!data) return null;
-  const admin = me.role === 'admin';
+  const admin = can(me.role, 'money');
   return (
     <div className="space-y-4">
       <div>
@@ -45,8 +49,22 @@ export function TodayTab({ go }: { go: (t: 'money' | 'bookings') => void }) {
         <Stat label="Today" value={data.bookings.length} sub="bookings" />
         <Stat label="Occupancy" value={`${data.occupancy}%`} tone="text-cyan" />
         <Stat label="Upcoming" value={data.upcoming} sub="future bookings" />
-        {admin ? <Stat label="Collected today" value={rupees(data.collectedToday ?? 0)} tone="text-lime" /> : <Stat label="Role" value="Coach" tone="text-lime" />}
+        {admin ? (
+          <Stat label="Collected today" value={rupees(data.collectedToday ?? 0)} tone="text-lime" />
+        ) : data.cashOnName !== undefined ? (
+          <button onClick={() => go('cash')} className="text-left"><Stat label="Cash on your name" value={rupees(data.cashOnName)} tone="text-amber" sub="tap to deposit" /></button>
+        ) : (
+          <button onClick={() => go('cash')} className="text-left"><Stat label="Cash you took today" value={rupees(data.cashTakenToday ?? 0)} tone="text-amber" sub="hand it to your head coach" /></button>
+        )}
       </div>
+
+      {admin && (data.pendingDeposits ?? 0) > 0 && (
+        <button onClick={() => go('money')} className="w-full flex items-center gap-3 rounded-3xl border border-amber/50 bg-amber/10 p-4 text-left">
+          <span className="grid place-items-center w-10 h-10 rounded-2xl bg-amber text-ink font-display font-bold">{data.pendingDeposits}</span>
+          <span className="flex-1"><b>Cash deposits to confirm</b><br /><span className="text-xs text-soft">Money → Cash: check the bank or the cash handed to you</span></span>
+          <ChevronRight className="w-5 h-5" />
+        </button>
+      )}
 
       {admin && data.threshold && !data.threshold.registered && data.threshold.pct >= 70 && (
         <div className="flex gap-3 rounded-2xl border border-amber/40 bg-amber/10 p-3 text-sm">

@@ -10,19 +10,21 @@ import { prettyMobile } from '@/lib/shared/whatsapp';
 import { WhatsAppIcon } from '@/components/ui/BrandIcons';
 import { Field, inputCls } from '@/components/ui/Field';
 import { Sheet } from '@/components/ui/Sheet';
+import { CashTab } from './CashTab';
 import { Badge, Btn, Card, Empty, fileToDataUrl, Segmented, Spinner, staff, Stat, useAction, useStaff } from './ui';
 
-type Sub = 'verify' | 'overview' | 'bills' | 'expenses' | 'income' | 'gst';
+type Sub = 'verify' | 'cash' | 'overview' | 'bills' | 'expenses' | 'income' | 'gst';
 
 export function MoneyTab() {
   const [sub, setSub] = useState<Sub>('verify');
   return (
     <div className="space-y-4">
       <Segmented value={sub} onChange={setSub} options={[
-        { value: 'verify', label: 'Verify' }, { value: 'overview', label: 'Funds' }, { value: 'bills', label: 'Bill book' },
+        { value: 'verify', label: 'Verify' }, { value: 'cash', label: 'Cash' }, { value: 'overview', label: 'Funds' }, { value: 'bills', label: 'Bill book' },
         { value: 'expenses', label: 'Expenses' }, { value: 'income', label: 'Income' }, { value: 'gst', label: 'GST & exports' },
       ]} />
       {sub === 'verify' && <VerifyQueue />}
+      {sub === 'cash' && <CashTab />}
       {sub === 'overview' && <Overview />}
       {sub === 'bills' && <BillBook />}
       {sub === 'expenses' && <Expenses />}

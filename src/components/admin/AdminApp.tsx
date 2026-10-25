@@ -1,6 +1,7 @@
 'use client';
 
-import { CalendarDays, ClipboardList, Info, KeyRound, LayoutDashboard, Loader2, LogOut, Menu, PiggyBank, Settings, ShieldCheck } from 'lucide-react';
+import { Banknote, CalendarDays, ClipboardList, Info, KeyRound, LayoutDashboard, Loader2, LogOut, Menu, PiggyBank, Settings, ShieldCheck } from 'lucide-react';
+import { can, ROLE_LABEL, type Permission } from '@/lib/shared/rbac';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/client/api';
 import { Shuttle } from '@/components/ui/BrandIcons';
@@ -9,22 +10,26 @@ import { Sheet } from '@/components/ui/Sheet';
 import { AboutTab } from './AboutTab';
 import { AccountCard } from './AccountCard';
 import { BookingsTab } from './BookingsTab';
+import { CashTab } from './CashTab';
 import { MoneyTab } from './MoneyTab';
 import { ScheduleTab } from './ScheduleTab';
 import { SettingsTab } from './SettingsTab';
 import { TodayTab } from './TodayTab';
 import { MeContext, ToastHost, useMe, type Me } from './ui';
 
-type Tab = 'today' | 'bookings' | 'money' | 'schedule' | 'about' | 'settings' | 'account';
+type Tab = 'today' | 'bookings' | 'money' | 'cash' | 'schedule' | 'about' | 'settings' | 'account';
 
-const TABS: { key: Tab; label: string; icon: typeof LayoutDashboard; admin?: boolean }[] = [
-  { key: 'today', label: 'Today', icon: LayoutDashboard },
-  { key: 'bookings', label: 'Bookings', icon: ClipboardList },
-  { key: 'money', label: 'Money', icon: PiggyBank, admin: true },
-  { key: 'schedule', label: 'Courts', icon: CalendarDays },
-  { key: 'about', label: 'About page', icon: Info },
-  { key: 'settings', label: 'Settings', icon: Settings, admin: true },
-  { key: 'account', label: 'My account', icon: KeyRound },
+/** Each section shows only for roles with its permission (src/lib/shared/rbac.ts). */
+const TABS: { key: Tab; label: string; icon: typeof LayoutDashboard; perm: Permission; hideWith?: Permission }[] = [
+  { key: 'today', label: 'Today', icon: LayoutDashboard, perm: 'bookings.view' },
+  { key: 'bookings', label: 'Bookings', icon: ClipboardList, perm: 'bookings.view' },
+  { key: 'money', label: 'Money', icon: PiggyBank, perm: 'money' },
+  // The admin sees cash inside Money; coaches get it as their own section.
+  { key: 'cash', label: 'Cash', icon: Banknote, perm: 'cash.collect', hideWith: 'money' },
+  { key: 'schedule', label: 'Courts', icon: CalendarDays, perm: 'schedule.manage' },
+  { key: 'about', label: 'About page', icon: Info, perm: 'about.manage' },
+  { key: 'settings', label: 'Settings', icon: Settings, perm: 'settings' },
+  { key: 'account', label: 'My account', icon: KeyRound, perm: 'account' },
 ];
 
 export function AdminApp() {
@@ -114,7 +119,8 @@ function Shell({ onSignOut }: { onSignOut: () => void }) {
   const me = useMe();
   const [tab, setTab] = useState<Tab>('today');
   const [more, setMore] = useState(false);
-  const tabs = TABS.filter((t) => !t.admin || me.role === 'admin');
+  const tabs = TABS.filter((t) => can(me.role, t.perm) && !(t.hideWith && can(me.role, t.hideWith)));
+  const allowed = (t: Tab) => tabs.some((x) => x.key === t);
   const primary = tabs.slice(0, 4);
   const rest = tabs.slice(4);
 
@@ -139,7 +145,7 @@ function Shell({ onSignOut }: { onSignOut: () => void }) {
       <aside className="hidden lg:flex lg:flex-col w-60 shrink-0 border-r border-line bg-night/60 p-4 gap-1 sticky top-0 h-dvh">
         <div className="flex items-center gap-2 px-2 pb-5">
           <span className="grid place-items-center w-9 h-9 rounded-xl bg-gradient-to-br from-violet to-cyan"><Shuttle className="w-6 h-6 text-ink" /></span>
-          <div className="min-w-0"><div className="font-display text-sm font-bold">GSA Desk</div><div className="text-[11px] text-muted truncate">{me.name} · {me.role}</div></div>
+          <div className="min-w-0"><div className="font-display text-sm font-bold">GSA Desk</div><div className="text-[11px] text-muted truncate">{me.name} · {ROLE_LABEL[me.role]}</div></div>
         </div>
         {tabs.map((t) => (
           <button key={t.key} onClick={() => go(t.key)} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold ${tab === t.key ? 'bg-lime text-ink' : 'text-soft hover:bg-panel-2'}`}>
@@ -153,15 +159,16 @@ function Shell({ onSignOut }: { onSignOut: () => void }) {
         <header className="lg:hidden sticky top-0 z-30 glass border-x-0 border-t-0 flex items-center gap-2 px-4 h-14">
           <span className="grid place-items-center w-8 h-8 rounded-lg bg-gradient-to-br from-violet to-cyan"><Shuttle className="w-5 h-5 text-ink" /></span>
           <span className="font-display text-sm font-bold">{TABS.find((t) => t.key === tab)?.label}</span>
-          <span className="ml-auto text-[11px] text-muted">{me.name} · {me.role}</span>
+          <span className="ml-auto text-[11px] text-muted">{me.name} · {ROLE_LABEL[me.role]}</span>
         </header>
         <main className="mx-auto max-w-5xl px-4 py-5 pb-32 lg:pb-10">
           {tab === 'today' && <TodayTab go={go} />}
           {tab === 'bookings' && <BookingsTab />}
-          {tab === 'money' && me.role === 'admin' && <MoneyTab />}
-          {tab === 'schedule' && <ScheduleTab />}
-          {tab === 'about' && <AboutTab />}
-          {tab === 'settings' && me.role === 'admin' && <SettingsTab />}
+          {tab === 'money' && allowed('money') && <MoneyTab />}
+          {tab === 'cash' && allowed('cash') && <CashTab />}
+          {tab === 'schedule' && allowed('schedule') && <ScheduleTab />}
+          {tab === 'about' && allowed('about') && <AboutTab />}
+          {tab === 'settings' && allowed('settings') && <SettingsTab />}
           {tab === 'account' && <AccountCard onSignedOut={onSignOut} />}
         </main>
       </div>

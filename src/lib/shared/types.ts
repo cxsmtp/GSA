@@ -1,4 +1,4 @@
-export type Role = 'admin' | 'coach';
+export type { Role } from './rbac';
 export type BookingStatus = 'held' | 'reserved' | 'submitted' | 'confirmed' | 'cancelled' | 'expired';
 export type PayMethod = 'upi' | 'razorpay' | 'cash' | 'card' | 'bank' | 'other';
 export const PAY_METHODS: readonly PayMethod[] = ['upi', 'razorpay', 'cash', 'card', 'bank', 'other'];

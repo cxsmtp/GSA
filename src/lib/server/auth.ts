@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import { cookies } from 'next/headers';
-import type { Role } from '@/lib/shared/types';
+import { can, ROLE_LABEL, type Permission, type Role } from '@/lib/shared/rbac';
 import { audit } from './audit';
 import { dataFile } from './dataDir';
 import { get, run } from './db';
@@ -12,10 +12,8 @@ import { decrypt, randomToken, sha256 } from './secrets';
 import { verifyTotp } from './totp';
 
 /**
- * Staff sign-in. Two roles:
- *   admin  everything
- *   coach  bookings, timetable, blocks, About page, can note cash collected; never sees money
- *          (payments, bill book, expenses, reports) or settings. Enforced on the server for every route.
+ * Staff sign-in. Roles and what each may do are in src/lib/shared/rbac.ts (admin, head coach, junior
+ * coach); every staff route names a permission and requireUser checks it on the server.
  *
  * Sessions: a random 256-bit token in an HttpOnly, Secure, SameSite=Strict cookie (__Host- prefix in
  * production); the database keeps only its hash. 12 h idle / 7 days at most; signing out, a password
@@ -150,12 +148,12 @@ export function endSessions(userId: number) {
   run('DELETE FROM sessions WHERE user_id = ?', userId);
 }
 
-/** The gate for every staff API call. Deny by default: a route must name the roles it allows. */
-export async function requireUser(req: Request, roles: readonly Role[], { allowMustChange = false } = {}): Promise<SessionUser> {
+/** The gate for every staff API call. Deny by default: a route must name the permission it needs. */
+export async function requireUser(req: Request, perm: Permission, { allowMustChange = false } = {}): Promise<SessionUser> {
   if (req.method !== 'GET' && req.method !== 'HEAD') assertSameOrigin(req);
   const user = await currentUser();
   if (!user) throw new HttpError(401, 'Please sign in.');
-  if (!roles.includes(user.role)) throw new HttpError(403, 'This section is for the admin only.');
+  if (!can(user.role, perm)) throw new HttpError(403, `Not allowed for a ${ROLE_LABEL[user.role] ?? 'staff'} account.`);
   if (user.mustChange && !allowMustChange) throw new HttpError(403, 'Choose your own password first.', {}, { code: 'must_change' });
   return user;
 }

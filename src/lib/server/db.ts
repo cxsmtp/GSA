@@ -232,6 +232,50 @@ const MIGRATIONS: string[] = [
     mac TEXT NOT NULL
   );
   `,
+  // 2: roles become a permission system (junior coaches), and cash custody: who took the money and
+  // which head coach answers for it until it is deposited and the admin confirms.
+  `
+  CREATE TABLE users_new (
+    id INTEGER PRIMARY KEY,
+    username TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    name TEXT NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('admin','coach','junior')),
+    password_hash TEXT NOT NULL,
+    must_change INTEGER NOT NULL DEFAULT 1,
+    totp_secret TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    session_gen INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    last_login_at TEXT,
+    reports_to INTEGER REFERENCES users(id)
+  );
+  INSERT INTO users_new (id, username, name, role, password_hash, must_change, totp_secret, active, session_gen, created_at, last_login_at)
+    SELECT id, username, name, role, password_hash, must_change, totp_secret, active, session_gen, created_at, last_login_at FROM users;
+  DROP TABLE users;
+  ALTER TABLE users_new RENAME TO users;
+
+  ALTER TABLE payments ADD COLUMN collected_by TEXT;
+  ALTER TABLE payments ADD COLUMN custodian TEXT;
+  UPDATE payments SET collected_by = created_by WHERE method = 'cash';
+  CREATE INDEX payments_custodian ON payments(custodian) WHERE custodian IS NOT NULL;
+
+  CREATE TABLE cash_deposits (
+    id INTEGER PRIMARY KEY,
+    custodian TEXT NOT NULL,
+    amount_paise INTEGER NOT NULL CHECK (amount_paise > 0),
+    method TEXT NOT NULL CHECK (method IN ('bank','handover')),
+    reference TEXT NOT NULL DEFAULT '',
+    note TEXT NOT NULL DEFAULT '',
+    slip_media TEXT,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','confirmed','rejected')),
+    date TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    decided_by TEXT,
+    decided_at TEXT,
+    decision_note TEXT NOT NULL DEFAULT ''
+  );
+  CREATE INDEX cash_deposits_custodian ON cash_deposits(custodian, status);
+  `,
 ];
 
 type Db = DatabaseSync;
@@ -250,18 +294,26 @@ function migrate(db: Db) {
   const row = db.prepare('SELECT version FROM schema_version').get() as { version: number } | undefined;
   let version = row?.version ?? 0;
   if (!row) db.prepare('INSERT INTO schema_version (version) VALUES (0)').run();
+  if (version >= MIGRATIONS.length) return;
+  // Rebuilding a table (the SQLite way to change a CHECK) needs foreign keys off for the copy; they are
+  // checked again before anything commits.
+  db.exec('PRAGMA foreign_keys = OFF');
   while (version < MIGRATIONS.length) {
     db.exec('BEGIN IMMEDIATE');
     try {
       db.exec(MIGRATIONS[version]);
+      const broken = db.prepare('PRAGMA foreign_key_check').all();
+      if (broken.length) throw new Error(`Migration ${version + 1} broke ${broken.length} references.`);
       version += 1;
       db.prepare('UPDATE schema_version SET version = ?').run(version);
       db.exec('COMMIT');
     } catch (err) {
       db.exec('ROLLBACK');
+      db.exec('PRAGMA foreign_keys = ON');
       throw err;
     }
   }
+  db.exec('PRAGMA foreign_keys = ON');
 }
 
 export function db(): Db {

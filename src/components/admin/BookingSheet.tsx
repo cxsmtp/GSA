@@ -8,7 +8,7 @@ import { prettyMobile } from '@/lib/shared/whatsapp';
 import { WhatsAppIcon } from '@/components/ui/BrandIcons';
 import { inputCls } from '@/components/ui/Field';
 import { Sheet } from '@/components/ui/Sheet';
-import { Badge, Btn, Spinner, staff, useAction, useMe, useToast } from './ui';
+import { Badge, Btn, Spinner, staff, useAction, useCan, useToast } from './ui';
 
 interface Detail {
   booking: {
@@ -23,7 +23,7 @@ interface Detail {
 
 /** Everything about one booking, with the actions the signed-in role may take. */
 export function BookingSheet({ id, onClose, onChanged }: { id: number | null; onClose: () => void; onChanged: () => void }) {
-  const me = useMe();
+  const allowedTo = useCan();
   const toast = useToast();
   const { busy, run } = useAction();
   const [d, setD] = useState<Detail | null>(null);
@@ -31,7 +31,7 @@ export function BookingSheet({ id, onClose, onChanged }: { id: number | null; on
   const [reason, setReason] = useState('');
   const [refund, setRefund] = useState('');
   const [refundMethod, setRefundMethod] = useState('upi');
-  const admin = me.role === 'admin';
+  const admin = allowedTo('money');
 
   const load = async (bid: number) => {
     setD(null);
@@ -92,16 +92,16 @@ export function BookingSheet({ id, onClose, onChanged }: { id: number | null; on
           )}
 
           <div className="grid grid-cols-2 gap-2">
-            {d.waLink && b.waSent && <p className="col-span-2 text-center text-xs text-ok">✓ Confirmation sent on WhatsApp</p>}
-            {d.waLink && (
+            {allowedTo('bookings.notify') && d.waLink && b.waSent && <p className="col-span-2 text-center text-xs text-ok">✓ Confirmation sent on WhatsApp</p>}
+            {allowedTo('bookings.notify') && d.waLink && (
               <a href={d.waLink} target="_blank" rel="noopener noreferrer" onClick={() => void staff(`bookings/${b.id}/wa-sent`, 'POST').then(() => { if (id) void load(id); onChanged(); })} className="col-span-2 flex items-center justify-center gap-2 rounded-xl py-3 font-bold bg-[#25D366] text-ink">
                 <WhatsAppIcon className="w-5 h-5" /> {b.waSent ? 'Send WhatsApp confirmation again' : `Send confirmation on WhatsApp${b.payState === 'due' ? ' (with amount due)' : ''}`}
               </a>
             )}
-            {['held', 'reserved', 'submitted', 'expired'].includes(b.status) && (
+            {allowedTo('cash.collect') && ['held', 'reserved', 'expired'].includes(b.status) && b.payState === 'due' && (
               <>
-                <Btn tone="ok" busy={busy} onClick={() => act(() => staff(`bookings/${b.id}/collected`, 'POST', { method: 'cash' }), admin ? 'Cash received — confirmed' : 'Noted — admin will verify')}>Cash received</Btn>
-                <Btn busy={busy} onClick={() => act(() => staff(`bookings/${b.id}/collected`, 'POST', { method: 'upi' }), admin ? 'UPI received — confirmed' : 'Noted — admin will verify')}>UPI at desk</Btn>
+                <Btn tone="ok" busy={busy} onClick={() => act(() => staff(`bookings/${b.id}/collected`, 'POST', { method: 'cash' }), 'Cash received — booking paid')}>Cash received</Btn>
+                <Btn busy={busy} onClick={() => act(() => staff(`bookings/${b.id}/collected`, 'POST', { method: 'upi' }), admin ? 'UPI received — booking paid' : 'Noted — admin will check the bank')}>UPI at desk</Btn>
               </>
             )}
             {d.invoice && (
@@ -111,7 +111,7 @@ export function BookingSheet({ id, onClose, onChanged }: { id: number | null; on
             <a href={d.payLink} target="_blank" rel="noopener" className="flex items-center justify-center gap-1.5 rounded-xl border border-line py-2.5 text-sm font-semibold"><ExternalLink className="w-4 h-4" /> Open</a>
           </div>
 
-          {!['cancelled', 'expired'].includes(b.status) && (admin || ((b.paid ?? 0) === 0 && b.status !== 'confirmed')) && (
+          {allowedTo('bookings.cancel') && !['cancelled', 'expired'].includes(b.status) && (admin || (b.payState === 'due' && b.status !== 'confirmed')) && (
             <div className="pt-2 border-t border-line">
               {!cancelling ? (
                 <Btn tone="bad" onClick={() => setCancelling(true)} className="w-full">Cancel booking</Btn>

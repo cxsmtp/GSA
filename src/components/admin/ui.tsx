@@ -3,7 +3,7 @@
 import { Loader2 } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { api } from '@/lib/client/api';
-import type { Role } from '@/lib/shared/types';
+import { can, type Permission, type Role } from '@/lib/shared/rbac';
 
 export interface Me {
   id: number;
@@ -16,6 +16,11 @@ export interface Me {
 
 export const MeContext = createContext<Me | null>(null);
 export const useMe = () => useContext(MeContext)!;
+/** Does the signed-in user have this permission? (The server checks again on every call.) */
+export const useCan = () => {
+  const me = useMe();
+  return (perm: Permission) => can(me.role, perm);
+};
 
 /** Load a staff API path; returns data, error, loading and a reload. */
 export function useStaff<T>(path: string | null) {

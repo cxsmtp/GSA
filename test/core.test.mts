@@ -107,13 +107,19 @@ describe('security', () => {
     run("UPDATE audit SET detail = '{\"amount\":1}' WHERE id = ?", row.id);
     assert.equal(verifyAudit().ok, false);
   });
-  test('every staff route names its roles; money and settings are admin only', () => {
+  test('every staff route names a permission; money and settings stay admin-only', async () => {
+    const { can, PERMISSIONS } = await import('../src/lib/shared/rbac.ts');
     for (const r of _routes()) {
-      assert.ok(r.roles.length > 0, `${r.method} ${r.path}`);
-      if (/^(payments|invoices|expenses|finance|export|settings|users|audit|backup|media|rules|courts\/)/.test(r.path) || (r.path === 'courts' && r.method !== 'GET')) {
-        assert.deepEqual([...r.roles], ['admin'], `${r.method} ${r.path} must be admin-only`);
+      assert.ok(r.perm in PERMISSIONS, `${r.method} ${r.path}`);
+      if (/^(payments|invoices|expenses|finance|export|settings|users|audit|backup|media|rules)/.test(r.path) || /^cash\/deposits\/:id/.test(r.path)) {
+        assert.ok(!can('coach', r.perm) && !can('junior', r.perm), `${r.method} ${r.path} must be admin-only`);
       }
     }
+  });
+  test('a junior coach helps with reservations and changes nothing else', async () => {
+    const { can } = await import('../src/lib/shared/rbac.ts');
+    for (const p of ['bookings.view', 'bookings.create', 'bookings.notify', 'cash.collect'] as const) assert.ok(can('junior', p), p);
+    for (const p of ['bookings.edit', 'bookings.cancel', 'schedule.manage', 'about.manage', 'cash.custody', 'money', 'settings', 'team'] as const) assert.ok(!can('junior', p), p);
   });
   test('Razorpay signatures', async () => {
     process.env.RAZORPAY_KEY_SECRET = 'secret';
@@ -153,5 +159,34 @@ describe('phone bookings by the coach', () => {
     await verifyPayment(p.id, 'admin');
     assert.equal(payStateOf(bookingById(b.id)!).payState, 'paid');
     assert.match(decodeURIComponent(deskConfirmLink(bookingById(b.id)!)!), /received ✓/);
+  });
+});
+
+describe('cash custody', () => {
+  test("a junior's cash goes on the head coach's name until a confirmed deposit", async () => {
+    const { run: exec } = await import('../src/lib/server/db.ts');
+    const { custodianFor, balances, createDeposit, decideDeposit } = await import('../src/lib/server/cash.ts');
+    const { recordPayment } = await import('../src/lib/server/payments.ts');
+    const at = new Date().toISOString();
+    const headId = exec("INSERT INTO users (username, name, role, password_hash, must_change, created_at) VALUES ('vikram','Coach Vikram','coach','x',0,?)", at).lastId;
+    const juniorId = exec("INSERT INTO users (username, name, role, password_hash, must_change, created_at, reports_to) VALUES ('aman','Aman','junior','x',0,?,?)", at, headId).lastId;
+    const junior = { id: juniorId, username: 'aman', role: 'junior' as const };
+    const head = { id: headId, username: 'vikram', name: 'Coach Vikram', role: 'coach' as const, mustChange: false, totp: false };
+    assert.equal(custodianFor(junior), 'vikram');
+    assert.equal(custodianFor(head), 'vikram');
+
+    const b = createBooking({ ...base, phone: '919876511111', name: 'Cash Player', slots: [{ courtId: 2, start: 13 * 60 }], source: 'desk', status: 'reserved', actor: 'aman', staff: true });
+    const p = recordPayment({ bookingId: b.id, direction: 'in', category: 'court', method: 'cash', amount: 50000, reference: '', date: b.date, note: '', verified: true, actor: 'aman', collectedBy: 'aman', custodian: custodianFor(junior) });
+    assert.equal(get<{ collected_by: string; custodian: string }>('SELECT collected_by, custodian FROM payments WHERE id = ?', p.id)!.custodian, 'vikram');
+    assert.equal(balances('vikram')[0].onHand, 50000);
+
+    assert.throws(() => createDeposit(head, { amount: 60000, method: 'bank', reference: '', note: '', slip: null }), /more than the cash/);
+    const dep = createDeposit(head, { amount: 50000, method: 'bank', reference: 'SLIP-1', note: '', slip: null });
+    assert.equal(balances('vikram')[0].onHand, 50000, 'still on his name until the admin confirms');
+    assert.equal(balances('vikram')[0].pending, 50000);
+    assert.throws(() => createDeposit(head, { amount: 100, method: 'handover', reference: '', note: '', slip: null }), /more than the cash/);
+    decideDeposit(dep, 'confirmed', '', 'admin');
+    assert.equal(balances('vikram')[0].onHand, 0);
+    assert.throws(() => decideDeposit(dep, 'rejected', 'x', 'admin'), /already confirmed/);
   });
 });

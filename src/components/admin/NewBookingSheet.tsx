@@ -9,11 +9,11 @@ import { prettyMobile } from '@/lib/shared/whatsapp';
 import { Field, inputCls } from '@/components/ui/Field';
 import { Sheet } from '@/components/ui/Sheet';
 import type { Pick } from './StaffGrid';
-import { Btn, staff, useAction, useMe } from './ui';
+import { Btn, staff, useAction, useCan } from './ui';
 
 /** A walk-in or phone booking made at the desk. Paid now, or "pay at venue" (reserved). */
 export function NewBookingSheet({ open, onClose, date, picks, onDone }: { open: boolean; onClose: () => void; date: string; picks: Pick[]; onDone: () => void }) {
-  const me = useMe();
+  const allowedTo = useCan();
   const { busy, run } = useAction();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
@@ -30,7 +30,7 @@ export function NewBookingSheet({ open, onClose, date, picks, onDone }: { open: 
     e.preventDefault();
     const r = await run(
       () => staff<{ id: number; ref: string; waLink: string | null; payState: string; due: number; amount: number }>('bookings', 'POST', { date, slots: picks.map((p) => ({ courtId: p.courtId, start: p.start })), name, phone, note: note || undefined, pay: pay === 'later' ? undefined : { method: pay, reference: reference || undefined } }),
-      pay === 'later' ? 'Booked — payment due' : me.role === 'admin' ? 'Booked and paid' : 'Booked — payment sent to admin to verify',
+      pay === 'later' ? 'Booked — payment due' : pay === 'cash' || allowedTo('money') ? 'Booked and paid' : 'Booked — admin will check the UPI in the bank',
     );
     if (r) {
       setDone({ ...r, name, phone });
@@ -41,7 +41,7 @@ export function NewBookingSheet({ open, onClose, date, picks, onDone }: { open: 
     }
   };
   const total = picks.reduce((n, p) => n + p.price, 0);
-  const methods = me.role === 'admin' ? (['cash', 'upi', 'card', 'later'] as const) : (['cash', 'upi', 'later'] as const);
+  const methods = allowedTo('money') ? (['cash', 'upi', 'card', 'later'] as const) : (['cash', 'upi', 'later'] as const);
   if (done) {
     return (
       <Sheet open={open} onClose={close} title="Booked">
@@ -91,7 +91,8 @@ export function NewBookingSheet({ open, onClose, date, picks, onDone }: { open: 
           </div>
         </div>
         {(pay === 'upi' || pay === 'card') && <Field label="Reference (UTR / last 4)"><input className={inputCls} value={reference} onChange={(e) => setReference(e.target.value)} maxLength={40} /></Field>}
-        {me.role === 'coach' && pay !== 'later' && <p className="text-xs text-muted">The admin verifies the money you collected; the booking holds the court meanwhile.</p>}
+        {pay === 'cash' && !allowedTo('money') && <p className="text-xs text-muted">Cash is recorded as taken by you and goes on {allowedTo('cash.custody') ? 'your name' : 'your head coach’s name'} until it is deposited.</p>}
+        {pay === 'upi' && !allowedTo('money') && <p className="text-xs text-muted">UPI paid at the desk: the admin checks it reached the bank.</p>}
         <Btn tone="lime" busy={busy} className="w-full py-3.5">Book {picks.length} slot{picks.length > 1 ? 's' : ''}</Btn>
       </form>
     </Sheet>

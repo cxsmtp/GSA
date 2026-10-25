@@ -6,7 +6,7 @@ import { rupees } from '@/lib/shared/money';
 import { addDays, fmtDate, fmtTime, hhmm, todayIst } from '@/lib/shared/time';
 import { BLOCK_KINDS } from '@/lib/shared/types';
 import { Field, inputCls } from '@/components/ui/Field';
-import { Btn, Card, Empty, Segmented, Spinner, staff, useAction, useMe, useStaff } from './ui';
+import { Btn, Card, Empty, Segmented, Spinner, staff, useAction, useCan, useStaff } from './ui';
 
 const DAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -16,17 +16,17 @@ interface Booking { hours: { open: number; close: number; closed: boolean }[]; s
 interface Block { id: number; court_id: number | null; court_name: string | null; date_from: string; date_to: string; days: string; start_min: number; end_min: number; kind: string; reason: string }
 
 export function ScheduleTab() {
-  const me = useMe();
+  const allowedTo = useCan();
   const [sub, setSub] = useState<'blocks' | 'courts' | 'hours'>('blocks');
   const courts = useStaff<{ courts: Court[]; rules: Rule[]; booking: Booking }>('courts');
   return (
     <div className="space-y-4">
-      {me.role === 'admin' && <Segmented value={sub} onChange={setSub} options={[{ value: 'blocks', label: 'Blocks & batches' }, { value: 'courts', label: 'Courts & prices' }, { value: 'hours', label: 'Hours & rules' }]} />}
+      {allowedTo('settings') && <Segmented value={sub} onChange={setSub} options={[{ value: 'blocks', label: 'Blocks & batches' }, { value: 'courts', label: 'Courts & prices' }, { value: 'hours', label: 'Hours & rules' }]} />}
       {courts.loading && !courts.data ? <Spinner /> : courts.data && (
         <>
           {sub === 'blocks' && <Blocks courts={courts.data.courts} />}
-          {sub === 'courts' && me.role === 'admin' && <CourtsPrices data={courts.data} reload={courts.reload} />}
-          {sub === 'hours' && me.role === 'admin' && <Hours booking={courts.data.booking} reload={courts.reload} />}
+          {sub === 'courts' && allowedTo('settings') && <CourtsPrices data={courts.data} reload={courts.reload} />}
+          {sub === 'hours' && allowedTo('settings') && <Hours booking={courts.data.booking} reload={courts.reload} />}
         </>
       )}
     </div>

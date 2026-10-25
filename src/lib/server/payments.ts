@@ -159,18 +159,22 @@ export interface RecordInput {
   note: string;
   verified: boolean;
   actor: string;
+  /** Cash only: who took it, and who answers for it until it is deposited (src/lib/server/cash.ts). */
+  collectedBy?: string;
+  custodian?: string;
 }
 
 export function recordPayment(i: RecordInput): PaymentRow {
   if (i.amount <= 0) throw new HttpError(400, 'Amount must be more than zero.');
   try {
     const id = run(
-      `INSERT INTO payments (direction, booking_id, invoice_id, category, method, amount_paise, reference, status, date, note, created_by, created_at, verified_by, verified_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO payments (direction, booking_id, invoice_id, category, method, amount_paise, reference, status, date, note, created_by, created_at, verified_by, verified_at, collected_by, custodian)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       i.direction, i.bookingId ?? null, i.invoiceId ?? null, i.category, i.method, i.amount, i.reference, i.verified ? 'verified' : 'pending', i.date, i.note, i.actor,
       new Date().toISOString(), i.verified ? i.actor : null, i.verified ? new Date().toISOString() : null,
+      i.method === 'cash' ? (i.collectedBy ?? i.actor) : null, i.method === 'cash' ? (i.custodian ?? i.actor) : null,
     ).lastId;
-    audit(i.actor, i.direction === 'refund' ? 'payment.refund' : 'payment.record', 'payment', id, { amount: i.amount, method: i.method, booking: i.bookingId ?? null, verified: i.verified });
+    audit(i.actor, i.direction === 'refund' ? 'payment.refund' : 'payment.record', 'payment', id, { amount: i.amount, method: i.method, booking: i.bookingId ?? null, verified: i.verified, ...(i.method === 'cash' ? { custodian: i.custodian ?? i.actor } : {}) });
     return get<PaymentRow>('SELECT * FROM payments WHERE id = ?', id)!;
   } catch (err) {
     if (isUniqueViolation(err)) throw new HttpError(409, 'A payment with this reference is already recorded.');

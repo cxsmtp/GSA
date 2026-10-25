@@ -4,6 +4,7 @@ import { Copy, Download, Plus, ShieldAlert, ShieldCheck } from 'lucide-react';
 import QRCode from 'qrcode';
 import { useEffect, useState } from 'react';
 import { STATES } from '@/lib/shared/gst';
+import { can, PERMISSIONS, ROLE_LABEL, ROLES, type Permission, type Role } from '@/lib/shared/rbac';
 import { fmtStamp } from '@/lib/shared/time';
 import { InstagramIcon } from '@/components/ui/BrandIcons';
 import { Field, inputCls } from '@/components/ui/Field';
@@ -189,44 +190,65 @@ function InstagramKit({ handle }: { handle: string }) {
   );
 }
 
-interface User { id: number; username: string; name: string; role: string; active: number; must_change: number; totp: number; last_login_at: string | null }
+interface User { id: number; username: string; name: string; role: Role; active: number; must_change: number; totp: number; last_login_at: string | null; reports_to: number | null }
 
 function Team() {
   const { data, loading, reload } = useStaff<{ users: User[] }>('users');
   const { busy, run } = useAction();
-  const [f, setF] = useState({ username: '', name: '', role: 'coach' });
+  const [f, setF] = useState({ username: '', name: '', role: 'junior' as Role, reportsTo: '' });
   const [secret, setSecret] = useState<{ username: string; password: string } | null>(null);
+  const users = data?.users ?? [];
+  const heads = users.filter((u) => u.active && u.role !== 'junior');
+  const nameOf = (id: number | null) => users.find((u) => u.id === id)?.name;
   return (
     <div className="space-y-4">
       <Card title="Add a user">
-        <form className="grid grid-cols-2 sm:grid-cols-4 gap-2" onSubmit={async (e) => {
+        <form className="grid grid-cols-2 gap-2" onSubmit={async (e) => {
           e.preventDefault();
-          const r = await run(() => staff<{ username: string; password: string }>('users', 'POST', f), 'User added');
-          if (r) { setSecret(r); setF({ username: '', name: '', role: 'coach' }); void reload(); }
+          const r = await run(() => staff<{ username: string; password: string }>('users', 'POST', { ...f, reportsTo: f.role === 'junior' && f.reportsTo ? Number(f.reportsTo) : undefined }), 'User added');
+          if (r) { setSecret(r); setF({ username: '', name: '', role: 'junior', reportsTo: '' }); void reload(); }
         }}>
           <input className={inputCls} placeholder="Name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} required />
           <input className={inputCls} placeholder="username" value={f.username} onChange={(e) => setF({ ...f, username: e.target.value.toLowerCase() })} required autoCapitalize="none" />
-          <select className={inputCls} value={f.role} onChange={(e) => setF({ ...f, role: e.target.value })}><option value="coach">Coach (no finances)</option><option value="admin">Admin (everything)</option></select>
-          <Btn tone="lime" busy={busy}><Plus className="w-4 h-4" /> Add</Btn>
+          <select className={inputCls} value={f.role} onChange={(e) => setF({ ...f, role: e.target.value as Role })} aria-label="Role">
+            {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+          </select>
+          {f.role === 'junior' ? (
+            <select className={inputCls} value={f.reportsTo} onChange={(e) => setF({ ...f, reportsTo: e.target.value })} aria-label="Reports to" required>
+              <option value="">Reports to…</option>
+              {heads.map((u) => <option key={u.id} value={u.id}>{u.name} ({ROLE_LABEL[u.role]})</option>)}
+            </select>
+          ) : <span />}
+          <Btn tone="lime" busy={busy} className="col-span-2"><Plus className="w-4 h-4" /> Add {ROLE_LABEL[f.role].toLowerCase()}</Btn>
         </form>
         {secret && (
           <div className="mt-3 rounded-2xl border border-lime/40 bg-lime/10 p-3 text-sm">
             Give <b>{secret.username}</b> this one-time password (shown once): <code className="font-mono text-lime select-all">{secret.password}</code>. They choose their own at first sign-in at <code>/admin</code>.
           </div>
         )}
-        <p className="text-[11px] text-muted mt-2">Coach: bookings, timetable, blocks, About page; can note cash collected (you verify it). Never sees payments, bills, expenses, reports or settings.</p>
+        <p className="text-[11px] text-muted mt-2">A junior coach&apos;s cash goes on the name of the head coach they report to.</p>
       </Card>
+
       {loading && !data ? <Spinner /> : (
         <ul className="space-y-2">
-          {data?.users.map((u) => (
-            <li key={u.id} className="rounded-2xl border border-line bg-panel/70 p-3">
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <div className="font-semibold">{u.name} <span className="text-xs text-muted">@{u.username}</span></div>
-                  <div className="text-xs text-soft capitalize">{u.role}{u.totp ? ' · 2-step on' : ''}{u.active ? '' : ' · deactivated'}{u.must_change ? ' · first sign-in pending' : ''}{u.last_login_at ? ` · last in ${fmtStamp(u.last_login_at)}` : ''}</div>
-                </div>
+          {users.map((u) => (
+            <li key={u.id} className="rounded-2xl border border-line bg-panel/70 p-3 space-y-2">
+              <div>
+                <div className="font-semibold">{u.name} <span className="text-xs text-muted">@{u.username}</span></div>
+                <div className="text-xs text-soft">{ROLE_LABEL[u.role]}{u.role === 'junior' ? ` · reports to ${nameOf(u.reports_to) ?? '— not set'}` : ''}{u.totp ? ' · 2-step on' : ''}{u.active ? '' : ' · deactivated'}{u.must_change ? ' · first sign-in pending' : ''}{u.last_login_at ? ` · last in ${fmtStamp(u.last_login_at)}` : ''}</div>
               </div>
-              <div className="flex flex-wrap gap-2 mt-2">
+              <div className="grid grid-cols-2 gap-2">
+                <select className={`${inputCls} py-2 text-sm`} value={u.role} aria-label="Role" onChange={(e) => run(() => staff(`users/${u.id}`, 'PATCH', { role: e.target.value }), 'Role changed — they sign in again').then(reload)}>
+                  {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
+                </select>
+                {u.role === 'junior' && (
+                  <select className={`${inputCls} py-2 text-sm`} value={u.reports_to ?? ''} aria-label="Reports to" onChange={(e) => run(() => staff(`users/${u.id}`, 'PATCH', { reportsTo: e.target.value ? Number(e.target.value) : null }), 'Saved').then(reload)}>
+                    <option value="">Reports to…</option>
+                    {heads.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}
+                  </select>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2">
                 <Btn busy={busy} onClick={async () => { const r = await run(() => staff<{ password: string }>(`users/${u.id}`, 'PATCH', { resetPassword: true }), 'Password reset'); if (r?.password) setSecret({ username: u.username, password: r.password }); }}>Reset password</Btn>
                 {u.totp ? <Btn busy={busy} onClick={() => run(() => staff(`users/${u.id}`, 'PATCH', { resetTotp: true }), '2-step reset').then(reload)}>Reset 2-step</Btn> : null}
                 <Btn tone={u.active ? 'bad' : 'ok'} busy={busy} onClick={() => run(() => staff(`users/${u.id}`, 'PATCH', { active: !u.active }), u.active ? 'Deactivated — signed out' : 'Activated').then(reload)}>{u.active ? 'Deactivate' : 'Activate'}</Btn>
@@ -235,6 +257,23 @@ function Team() {
           ))}
         </ul>
       )}
+
+      <Card title="What each role can do">
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead><tr className="text-muted"><th className="text-left py-1.5 font-semibold">Permission</th>{ROLES.map((r) => <th key={r} className="font-semibold px-1.5">{ROLE_LABEL[r].split(' ')[0]}</th>)}</tr></thead>
+            <tbody>
+              {(Object.keys(PERMISSIONS) as Permission[]).map((p) => (
+                <tr key={p} className="border-t border-line/60">
+                  <td className="py-2 text-soft">{PERMISSIONS[p]}</td>
+                  {ROLES.map((r) => <td key={r} className="text-center">{can(r, p) ? <span className="text-ok">✓</span> : <span className="text-muted/50">—</span>}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-[11px] text-muted mt-2">Checked by the server on every action, not just hidden on screen.</p>
+      </Card>
     </div>
   );
 }

@@ -2,7 +2,8 @@ import QRCode from 'qrcode';
 import { documentTitle, isValidGstin, STATES } from '@/lib/shared/gst';
 import { toPaise } from '@/lib/shared/money';
 import { addDays, isValidDate, parseHhmm, todayIst } from '@/lib/shared/time';
-import { BLOCK_KINDS, EXPENSE_CATEGORIES, INCOME_CATEGORIES, PAY_METHODS, type Role, type SlotRef } from '@/lib/shared/types';
+import { BLOCK_KINDS, EXPENSE_CATEGORIES, INCOME_CATEGORIES, PAY_METHODS, type SlotRef } from '@/lib/shared/types';
+import { can, ROLES, type Permission } from '@/lib/shared/rbac';
 import { normalizeIndianMobile } from '@/lib/shared/whatsapp';
 import { audit, recentAudit, verifyAudit } from './audit';
 import { endSessions, requireUser, userRow, type SessionUser } from './auth';
@@ -20,15 +21,13 @@ import { appUrl, DEFAULTS, getSettings, integrations, saveSettings, type Setting
 import { encrypt, randomToken } from './secrets';
 import { newTotpSecret, otpauthUri, verifyTotp } from './totp';
 import { deskConfirmLink, payStateOf } from './whatsapp';
+import { balances, cashCollections, createDeposit, custodianFor, decideDeposit, deposits } from './cash';
 import { enforce } from './rateLimit';
 
 /**
- * Every staff API call goes through this one table. A route lists the roles it allows; there is no
- * default, so a route can't be left open by forgetting a check. ADMIN routes carry money or settings;
- * BOTH routes are what a coach may see and do.
+ * Every staff API call goes through this one table. A route names the permission it needs
+ * (src/lib/shared/rbac.ts); there is no default, so a route can't be left open by forgetting a check.
  */
-const ADMIN: readonly Role[] = ['admin'];
-const BOTH: readonly Role[] = ['admin', 'coach'];
 
 interface Ctx {
   req: Request;
@@ -43,15 +42,15 @@ type Handler = (c: Ctx) => unknown | Promise<unknown>;
 interface Route {
   method: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
   path: string;
-  roles: readonly Role[];
+  perm: Permission;
   h: Handler;
   allowMustChange?: boolean;
   bodyLimit?: number;
 }
 
 const routes: Route[] = [];
-function route(method: Route['method'], path: string, roles: readonly Role[], h: Handler, opts: Partial<Route> = {}) {
-  routes.push({ method, path, roles, h, ...opts });
+function route(method: Route['method'], path: string, perm: Permission, h: Handler, opts: Partial<Route> = {}) {
+  routes.push({ method, path, perm, h, ...opts });
 }
 
 function idParam(c: Ctx, name = 'id'): number {
@@ -86,7 +85,7 @@ function time(v: unknown, field: string): number {
 
 /* ---------------- account ---------------- */
 
-route('POST', 'password', BOTH, async (c) => {
+route('POST', 'password', 'account', async (c) => {
   const b = await c.body();
   allowFields(b, ['current', 'next']);
   enforce(`pw:${c.user.id}`, 10, 15 * 60_000);
@@ -101,13 +100,13 @@ route('POST', 'password', BOTH, async (c) => {
   return { signedOut: true };
 }, { allowMustChange: true });
 
-route('POST', 'totp/setup', BOTH, async (c) => {
+route('POST', 'totp/setup', 'account', async (c) => {
   const secret = newTotpSecret();
   const uri = otpauthUri(secret, c.user.username, getSettings('academy').name);
   return { secret, qr: await QRCode.toString(uri, { type: 'svg', margin: 1 }) };
 });
 
-route('POST', 'totp/enable', BOTH, async (c) => {
+route('POST', 'totp/enable', 'account', async (c) => {
   const b = await c.body();
   allowFields(b, ['secret', 'code']);
   const secret = str(b.secret, 'secret', 64);
@@ -118,7 +117,7 @@ route('POST', 'totp/enable', BOTH, async (c) => {
   return {};
 });
 
-route('POST', 'totp/disable', BOTH, async (c) => {
+route('POST', 'totp/disable', 'account', async (c) => {
   const b = await c.body();
   allowFields(b, ['password']);
   const u = userRow(c.user.id)!;
@@ -140,10 +139,10 @@ function bookingListItem(b: BookingRow, admin: boolean) {
   };
 }
 
-route('GET', 'dashboard', BOTH, (c) => {
+route('GET', 'dashboard', 'bookings.view', (c) => {
   sweepExpired();
   const today = todayIst();
-  const admin = c.user.role === 'admin';
+  const admin = can(c.user.role, 'money');
   const todays = all<BookingRow>("SELECT * FROM bookings WHERE date = ? AND status IN ('reserved','submitted','confirmed','held') ORDER BY id", today);
   const firstStart = (b: BookingRow) => Math.min(...slotsOf(b).map((s) => s.start));
   const pendingPayments = admin ? all<{ n: number }>("SELECT COUNT(*) AS n FROM payments WHERE status='pending' AND direction='in' AND (method <> 'razorpay' OR reference <> '')")[0].n : undefined;
@@ -159,11 +158,14 @@ route('GET', 'dashboard', BOTH, (c) => {
     collectedToday,
     upcoming,
     threshold: admin ? thresholdWatch() : undefined,
+    cashOnName: can(c.user.role, 'cash.custody') && !admin ? (balances(c.user.username)[0]?.onHand ?? 0) : undefined,
+    cashTakenToday: !can(c.user.role, 'cash.custody') ? cashCollections({ collector: c.user.username, from: today, to: today }).reduce((n, r) => n + (r.direction === 'in' ? r.amount_paise : -r.amount_paise), 0) : undefined,
+    pendingDeposits: admin ? deposits().filter((d) => d.status === 'pending').length : undefined,
     integrations: admin ? integrations() : undefined,
   };
 });
 
-route('GET', 'day', BOTH, (c) => {
+route('GET', 'day', 'bookings.view', (c) => {
   const date = c.query.get('date') || todayIst();
   if (!isValidDate(date)) throw new HttpError(400, 'Invalid date.');
   sweepExpired();
@@ -172,9 +174,9 @@ route('GET', 'day', BOTH, (c) => {
 
 /* ---------------- bookings ---------------- */
 
-route('GET', 'bookings', BOTH, (c) => {
+route('GET', 'bookings', 'bookings.view', (c) => {
   sweepExpired();
-  const admin = c.user.role === 'admin';
+  const admin = can(c.user.role, 'money');
   const q = (c.query.get('q') || '').trim();
   const status = c.query.get('status') || 'live';
   const where: string[] = [];
@@ -198,10 +200,10 @@ route('GET', 'bookings', BOTH, (c) => {
   return { bookings: rows.map((b) => bookingListItem(b, admin)) };
 });
 
-route('GET', 'bookings/:id', BOTH, (c) => {
+route('GET', 'bookings/:id', 'bookings.view', (c) => {
   const b = bookingById(idParam(c));
   if (!b) throw new HttpError(404, 'Booking not found.');
-  const admin = c.user.role === 'admin';
+  const admin = can(c.user.role, 'money');
   const invoice = get<{ id: number; number: string; token: string; status: string }>('SELECT id, number, token, status FROM invoices WHERE booking_id = ? ORDER BY id DESC LIMIT 1', b.id);
   return {
     booking: { ...bookingListItem(b, admin), email: b.email, gstin: b.gstin, token: b.token, cancelReason: b.cancel_reason, slotList: slotsOf(b), createdBy: b.created_by, holdExpiresAt: b.hold_expires_at, code: b.confirm_code },
@@ -212,7 +214,32 @@ route('GET', 'bookings/:id', BOTH, (c) => {
   };
 });
 
-route('POST', 'bookings', BOTH, async (c) => {
+/**
+ * Money taken at the desk.
+ * Cash: the booking is paid at once and the cash goes on its custodian's name — the head coach who
+ * collected it, or the head coach a junior reports to (src/lib/server/cash.ts) — until deposited.
+ * UPI / card / bank: confirmed at once when the admin takes it; from a coach it waits for the admin to
+ * see it in the bank account (Money → Verify).
+ */
+async function takeDeskPayment(user: SessionUser, b: BookingRow, methodRaw: unknown, reference: string, amount: number) {
+  const admin = can(user.role, 'money');
+  const method = oneOf(methodRaw, 'Payment method', admin ? PAY_METHODS.filter((m) => m !== 'razorpay') : (['cash', 'upi'] as const));
+  if (method === 'cash') {
+    const custodian = custodianFor(user);
+    recordPayment({
+      bookingId: b.id, direction: 'in', category: 'court', method, amount, reference, date: todayIst(),
+      note: custodian === user.username ? `Cash taken by ${user.name}` : `Cash taken by ${user.name}, on ${custodian}'s name`,
+      verified: true, actor: user.username, collectedBy: user.username, custodian,
+    });
+    await confirmPaidBooking(b.id, user.username);
+    return;
+  }
+  recordPayment({ bookingId: b.id, direction: 'in', category: 'court', method, amount, reference, date: todayIst(), note: `Taken at the desk by ${user.name}`, verified: admin, actor: user.username });
+  if (admin) await confirmPaidBooking(b.id, user.username);
+  else if (bookingById(b.id)!.status !== 'submitted') setStatus(b.id, 'submitted');
+}
+
+route('POST', 'bookings', 'bookings.create', async (c) => {
   const body = await c.body();
   allowFields(body, ['date', 'slots', 'name', 'phone', 'email', 'gstin', 'note', 'pay']);
   const date = body.date;
@@ -230,43 +257,33 @@ route('POST', 'bookings', BOTH, async (c) => {
     date, slots, name: str(body.name, 'Name', 80), phone, email: str(body.email, 'Email', 120, { required: false }), gstin,
     note: str(body.note, 'Note', 300, { required: false }), source: 'desk', status: 'reserved', actor: c.user.username, staff: true,
   });
-  // Paid at the desk now. The admin's word verifies it; a coach's note waits for the admin.
   if (body.pay && typeof body.pay === 'object') {
     const p = body.pay as Record<string, unknown>;
-    const method = oneOf(p.method, 'Payment method', c.user.role === 'admin' ? PAY_METHODS.filter((m) => m !== 'razorpay') : (['cash', 'upi'] as const));
-    recordPayment({
-      bookingId: b.id, direction: 'in', category: 'court', method, amount: b.amount_paise, reference: str(p.reference, 'Reference', 40, { required: false }),
-      date: todayIst(), note: 'At the desk', verified: c.user.role === 'admin', actor: c.user.username,
-    });
-    if (c.user.role === 'admin') await confirmPaidBooking(b.id, c.user.username);
-    else setStatus(b.id, 'submitted');
+    await takeDeskPayment(c.user, b, p.method, str(p.reference, 'Reference', 40, { required: false }), b.amount_paise);
   }
   const fresh = bookingById(b.id)!;
   return { id: b.id, ref: b.ref, waLink: deskConfirmLink(fresh, appUrl(c.req)), ...payStateOf(fresh), amount: fresh.amount_paise };
 });
 
-route('POST', 'bookings/:id/collected', BOTH, async (c) => {
+route('POST', 'bookings/:id/collected', 'cash.collect', async (c) => {
   const b = bookingById(idParam(c));
   if (!b) throw new HttpError(404, 'Booking not found.');
   if (!['held', 'reserved', 'submitted', 'expired'].includes(b.status)) throw new HttpError(409, 'This booking is not waiting for payment.');
   const body = await c.body();
   allowFields(body, ['method', 'reference']);
-  const admin = c.user.role === 'admin';
-  const method = oneOf(body.method, 'Payment method', admin ? PAY_METHODS.filter((m) => m !== 'razorpay') : (['cash', 'upi'] as const));
   const due = b.amount_paise - paidTotal(b.id);
-  recordPayment({ bookingId: b.id, direction: 'in', category: 'court', method, amount: Math.max(due, 1), reference: str(body.reference, 'Reference', 40, { required: false }), date: todayIst(), note: admin ? 'Collected by admin' : `Collected by coach ${c.user.name}`, verified: admin, actor: c.user.username });
-  if (admin) await confirmPaidBooking(b.id, c.user.username);
-  else if (b.status !== 'submitted') setStatus(b.id, 'submitted');
+  if (due <= 0) throw new HttpError(409, 'This booking is already paid.');
+  await takeDeskPayment(c.user, b, body.method, str(body.reference, 'Reference', 40, { required: false }), due);
   return { waLink: deskConfirmLink(bookingById(b.id)!, appUrl(c.req)) };
 });
 
-route('POST', 'bookings/:id/cancel', BOTH, async (c) => {
+route('POST', 'bookings/:id/cancel', 'bookings.cancel', async (c) => {
   const b = bookingById(idParam(c));
   if (!b) throw new HttpError(404, 'Booking not found.');
   const body = await c.body();
   allowFields(body, ['reason', 'refund']);
   const reason = str(body.reason, 'Reason', 200);
-  const admin = c.user.role === 'admin';
+  const admin = can(c.user.role, 'money');
   if (b.status === 'cancelled' || b.status === 'expired') return {};
   const paid = paidTotal(b.id);
   if (!admin && (b.status === 'confirmed' || paid > 0)) throw new HttpError(403, 'A paid booking can only be cancelled by the admin (refund).');
@@ -275,7 +292,8 @@ route('POST', 'bookings/:id/cancel', BOTH, async (c) => {
       const r = body.refund as Record<string, unknown>;
       const amount = money(r.amount, 'Refund');
       if (amount > paid) throw new HttpError(400, 'Refund is more than was paid.');
-      recordPayment({ bookingId: b.id, direction: 'refund', category: 'court', method: oneOf(r.method, 'Refund method', PAY_METHODS), amount, reference: str(r.reference, 'Reference', 40, { required: false }), date: todayIst(), note: reason, verified: true, actor: c.user.username });
+      const refundMethod = oneOf(r.method, 'Refund method', PAY_METHODS);
+      recordPayment({ bookingId: b.id, direction: 'refund', category: 'court', method: refundMethod, amount, custodian: refundMethod === 'cash' ? custodianFor(c.user) : undefined, reference: str(r.reference, 'Reference', 40, { required: false }), date: todayIst(), note: reason, verified: true, actor: c.user.username });
       const inv = get<{ id: number }>("SELECT id FROM invoices WHERE booking_id = ? AND status = 'issued'", b.id);
       if (inv && amount === paid) cancelInvoice(inv.id, `Booking cancelled and refunded: ${reason}`, c.user.username);
     }
@@ -288,12 +306,12 @@ route('POST', 'bookings/:id/cancel', BOTH, async (c) => {
   return {};
 });
 
-route('POST', 'bookings/:id/wa-sent', BOTH, (c) => {
+route('POST', 'bookings/:id/wa-sent', 'bookings.notify', (c) => {
   run('UPDATE bookings SET wa_sent_at = COALESCE(wa_sent_at, ?) WHERE id = ?', new Date().toISOString(), idParam(c));
   return {};
 });
 
-route('PATCH', 'bookings/:id', BOTH, async (c) => {
+route('PATCH', 'bookings/:id', 'bookings.edit', async (c) => {
   const b = bookingById(idParam(c));
   if (!b) throw new HttpError(404, 'Booking not found.');
   const body = await c.body();
@@ -303,15 +321,60 @@ route('PATCH', 'bookings/:id', BOTH, async (c) => {
   return {};
 });
 
+/* ---------------- cash custody ---------------- */
+
+route('GET', 'cash', 'cash.collect', (c) => {
+  const { from, to } = range(c, 30);
+  const me = c.user;
+  if (can(me.role, 'money')) {
+    return { view: 'admin', balances: balances(), deposits: deposits(), collections: cashCollections({ from, to }), from, to };
+  }
+  if (can(me.role, 'cash.custody')) {
+    return { view: 'custodian', balance: balances(me.username)[0] ?? null, deposits: deposits(me.username), collections: cashCollections({ custodian: me.username, from, to }), from, to };
+  }
+  const custodian = custodianFor(me);
+  const lead = get<{ name: string }>('SELECT name FROM users WHERE username = ?', custodian);
+  const mine = cashCollections({ collector: me.username, from, to });
+  return { view: 'collector', custodian, custodianName: lead?.name ?? custodian, collections: mine, total: mine.reduce((n, r) => n + (r.direction === 'in' ? r.amount_paise : -r.amount_paise), 0), from, to };
+});
+
+route('POST', 'cash/deposits', 'cash.custody', async (c) => {
+  const b = await c.body();
+  allowFields(b, ['amount', 'method', 'reference', 'note', 'slip', 'date']);
+  const date = b.date ?? todayIst();
+  if (!isValidDate(date)) throw new HttpError(400, 'Invalid date.');
+  const id = createDeposit(c.user, {
+    amount: money(b.amount, 'Amount'), method: oneOf(b.method, 'Deposit type', ['bank', 'handover'] as const),
+    reference: str(b.reference, 'Reference', 60, { required: false }), note: str(b.note, 'Note', 200, { required: false }),
+    slip: b.slip ? saveDataUrl(b.slip, 'private', c.user.username, { allowPdf: true }) : null, date,
+  });
+  return { id };
+}, { bodyLimit: 6 * 1024 * 1024 });
+
+route('POST', 'cash/deposits/:id/:decision', 'money', async (c) => {
+  const b = await c.body();
+  allowFields(b, ['note']);
+  const decision = oneOf(c.params.decision, 'decision', ['confirm', 'reject'] as const);
+  decideDeposit(idParam(c), decision === 'confirm' ? 'confirmed' : 'rejected', str(b.note, 'Note', 200, { required: decision === 'reject' }), c.user.username);
+  return {};
+});
+
+route('GET', 'cash/slip/:id', 'cash.custody', (c) => {
+  const d = get<{ custodian: string; slip_media: string | null }>('SELECT custodian, slip_media FROM cash_deposits WHERE id = ?', idParam(c));
+  if (!d?.slip_media || (!can(c.user.role, 'money') && d.custodian !== c.user.username)) throw new HttpError(404, 'File not found.');
+  const m = readMedia(d.slip_media, 'private')!;
+  return new Response(new Uint8Array(m.body), { headers: { 'Content-Type': m.mime, 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; img-src 'self'; sandbox" } });
+});
+
 /* ---------------- courts, prices, blocks ---------------- */
 
-route('GET', 'courts', BOTH, () => ({
+route('GET', 'courts', 'bookings.view', () => ({
   courts: all('SELECT * FROM courts ORDER BY sort, id'),
   rules: all('SELECT * FROM price_rules ORDER BY priority DESC, id'),
   booking: getSettings('booking'),
 }));
 
-route('POST', 'courts', ADMIN, async (c) => {
+route('POST', 'courts', 'settings', async (c) => {
   const b = await c.body();
   allowFields(b, ['name', 'note']);
   const sort = (get<{ n: number | null }>('SELECT MAX(sort) AS n FROM courts')?.n ?? 0) + 1;
@@ -320,7 +383,7 @@ route('POST', 'courts', ADMIN, async (c) => {
   return { id };
 });
 
-route('PATCH', 'courts/:id', ADMIN, async (c) => {
+route('PATCH', 'courts/:id', 'settings', async (c) => {
   const id = idParam(c);
   const b = await c.body();
   allowFields(b, ['name', 'note', 'active', 'sort']);
@@ -331,7 +394,7 @@ route('PATCH', 'courts/:id', ADMIN, async (c) => {
   return {};
 });
 
-route('POST', 'rules', ADMIN, async (c) => {
+route('POST', 'rules', 'settings', async (c) => {
   const b = await c.body();
   allowFields(b, ['name', 'courtId', 'days', 'start', 'end', 'price', 'priority']);
   const start = time(b.start, 'From');
@@ -342,18 +405,18 @@ route('POST', 'rules', ADMIN, async (c) => {
   return { id };
 });
 
-route('DELETE', 'rules/:id', ADMIN, (c) => {
+route('DELETE', 'rules/:id', 'settings', (c) => {
   run('DELETE FROM price_rules WHERE id = ?', idParam(c));
   audit(c.user.username, 'price.delete', 'price_rule', idParam(c));
   return {};
 });
 
-route('GET', 'blocks', BOTH, (c) => {
+route('GET', 'blocks', 'bookings.view', (c) => {
   const from = c.query.get('from') || todayIst();
   return { blocks: all('SELECT b.*, c.name AS court_name FROM blocks b LEFT JOIN courts c ON c.id = b.court_id WHERE date_to >= ? ORDER BY date_from, start_min', from) };
 });
 
-route('POST', 'blocks', BOTH, async (c) => {
+route('POST', 'blocks', 'schedule.manage', async (c) => {
   const b = await c.body();
   allowFields(b, ['courtId', 'from', 'to', 'days', 'start', 'end', 'kind', 'reason']);
   if (!isValidDate(b.from) || !isValidDate(b.to) || b.to < b.from) throw new HttpError(400, 'Pick the dates.');
@@ -372,7 +435,7 @@ route('POST', 'blocks', BOTH, async (c) => {
   return { id, clashes: clashes.map((x) => x.ref) };
 });
 
-route('DELETE', 'blocks/:id', BOTH, (c) => {
+route('DELETE', 'blocks/:id', 'schedule.manage', (c) => {
   run('DELETE FROM blocks WHERE id = ?', idParam(c));
   audit(c.user.username, 'block.delete', 'block', idParam(c));
   return {};
@@ -380,7 +443,7 @@ route('DELETE', 'blocks/:id', BOTH, (c) => {
 
 /* ---------------- About page ---------------- */
 
-route('GET', 'people', BOTH, () => ({ people: all('SELECT * FROM people ORDER BY sort, id'), about: getSettings('about') }));
+route('GET', 'people', 'about.manage', () => ({ people: all('SELECT * FROM people ORDER BY sort, id'), about: getSettings('about') }));
 
 function personFields(b: Record<string, unknown>, user: SessionUser) {
   return {
@@ -394,7 +457,7 @@ function personFields(b: Record<string, unknown>, user: SessionUser) {
   };
 }
 
-route('POST', 'people', BOTH, async (c) => {
+route('POST', 'people', 'about.manage', async (c) => {
   const b = await c.body();
   allowFields(b, ['name', 'role', 'bio', 'highlights', 'photo', 'visible', 'sort']);
   const f = personFields(b, c.user);
@@ -403,7 +466,7 @@ route('POST', 'people', BOTH, async (c) => {
   return { id };
 }, { bodyLimit: 6 * 1024 * 1024 });
 
-route('PATCH', 'people/:id', BOTH, async (c) => {
+route('PATCH', 'people/:id', 'about.manage', async (c) => {
   const id = idParam(c);
   const b = await c.body();
   allowFields(b, ['name', 'role', 'bio', 'highlights', 'photo', 'visible', 'sort', 'removePhoto']);
@@ -415,13 +478,13 @@ route('PATCH', 'people/:id', BOTH, async (c) => {
   return {};
 }, { bodyLimit: 6 * 1024 * 1024 });
 
-route('DELETE', 'people/:id', BOTH, (c) => {
+route('DELETE', 'people/:id', 'about.manage', (c) => {
   run('DELETE FROM people WHERE id = ?', idParam(c));
   audit(c.user.username, 'people.delete', 'person', idParam(c));
   return {};
 });
 
-route('PUT', 'about', BOTH, async (c) => {
+route('PUT', 'about', 'about.manage', async (c) => {
   const b = await c.body();
   allowFields(b, ['headline', 'story', 'highlights']);
   const highlights = Array.isArray(b.highlights) ? b.highlights.slice(0, 8).map((h, i) => str(h, `Highlight ${i + 1}`, 60)).filter(Boolean) : [];
@@ -432,7 +495,7 @@ route('PUT', 'about', BOTH, async (c) => {
 
 /* ---------------- money (admin only) ---------------- */
 
-route('GET', 'payments', ADMIN, (c) => {
+route('GET', 'payments', 'money', (c) => {
   const status = c.query.get('status') || 'all';
   if (status === 'pending') {
     return {
@@ -444,21 +507,21 @@ route('GET', 'payments', ADMIN, (c) => {
   return { payments: all('SELECT p.*, b.ref, b.name FROM payments p LEFT JOIN bookings b ON b.id = p.booking_id WHERE p.date BETWEEN ? AND ? AND NOT (p.method = \'razorpay\' AND p.status = \'pending\') ORDER BY p.id DESC LIMIT 1000', from, to) };
 });
 
-route('POST', 'payments/:id/verify', ADMIN, async (c) => {
+route('POST', 'payments/:id/verify', 'money', async (c) => {
   await verifyPayment(idParam(c), c.user.username);
   const p = get<PaymentRow>('SELECT * FROM payments WHERE id = ?', idParam(c))!;
   const b = p.booking_id ? bookingById(p.booking_id) : undefined;
   return { waLink: b && b.status === 'confirmed' ? deskConfirmLink(b, appUrl(c.req)) : null, waAuto: integrations().whatsappApi };
 });
 
-route('POST', 'payments/:id/reject', ADMIN, async (c) => {
+route('POST', 'payments/:id/reject', 'money', async (c) => {
   const b = await c.body();
   allowFields(b, ['reason', 'keepBooking']);
   rejectPayment(idParam(c), str(b.reason, 'Reason', 200), c.user.username, { cancelBooking: b.keepBooking !== true });
   return {};
 });
 
-route('POST', 'payments', ADMIN, async (c) => {
+route('POST', 'payments', 'money', async (c) => {
   const b = await c.body();
   allowFields(b, ['direction', 'category', 'method', 'amount', 'reference', 'date', 'note']);
   const date = b.date ?? todayIst();
@@ -471,12 +534,12 @@ route('POST', 'payments', ADMIN, async (c) => {
   return { id: p.id };
 });
 
-route('GET', 'invoices', ADMIN, (c) => {
+route('GET', 'invoices', 'money', (c) => {
   const { from, to } = range(c, 90);
   return { invoices: listInvoices(from, to).map(({ seller_json: _s, items_json, ...r }) => ({ ...r, items: JSON.parse(items_json) })) };
 });
 
-route('POST', 'invoices', ADMIN, async (c) => {
+route('POST', 'invoices', 'money', async (c) => {
   const b = await c.body();
   allowFields(b, ['date', 'customerName', 'customerPhone', 'customerGstin', 'customerAddress', 'placeOfSupply', 'items', 'paid']);
   const date = b.date ?? todayIst();
@@ -498,14 +561,14 @@ route('POST', 'invoices', ADMIN, async (c) => {
   return { id: inv.id, number: inv.number, token: inv.token, title: documentTitle(g.mode) };
 });
 
-route('POST', 'invoices/:id/cancel', ADMIN, async (c) => {
+route('POST', 'invoices/:id/cancel', 'money', async (c) => {
   const b = await c.body();
   allowFields(b, ['reason']);
   cancelInvoice(idParam(c), str(b.reason, 'Reason', 200), c.user.username);
   return {};
 });
 
-route('GET', 'expenses', ADMIN, (c) => {
+route('GET', 'expenses', 'money', (c) => {
   const { from, to } = range(c, 90);
   return { expenses: all('SELECT * FROM expenses WHERE deleted_at IS NULL AND date BETWEEN ? AND ? ORDER BY date DESC, id DESC', from, to), categories: EXPENSE_CATEGORIES };
 });
@@ -523,7 +586,7 @@ function expenseFields(b: Record<string, unknown>) {
   };
 }
 
-route('POST', 'expenses', ADMIN, async (c) => {
+route('POST', 'expenses', 'money', async (c) => {
   const b = await c.body();
   allowFields(b, ['date', 'category', 'vendor', 'description', 'amount', 'gst', 'method', 'reference', 'bill']);
   const f = expenseFields(b);
@@ -533,25 +596,25 @@ route('POST', 'expenses', ADMIN, async (c) => {
   return { id };
 }, { bodyLimit: 6 * 1024 * 1024 });
 
-route('DELETE', 'expenses/:id', ADMIN, (c) => {
+route('DELETE', 'expenses/:id', 'money', (c) => {
   const id = idParam(c);
   run('UPDATE expenses SET deleted_at = ? WHERE id = ? AND deleted_at IS NULL', new Date().toISOString(), id);
   audit(c.user.username, 'expense.delete', 'expense', id);
   return {};
 });
 
-route('GET', 'finance', ADMIN, (c) => {
+route('GET', 'finance', 'money', (c) => {
   const { from, to } = range(c, 180);
   return { summary: summary(from, to), gst: gstReport(from, to), threshold: thresholdWatch(), from, to };
 });
 
 /* ---------------- settings, users, audit (admin only) ---------------- */
 
-route('GET', 'settings', ADMIN, () => ({
+route('GET', 'settings', 'settings', () => ({
   academy: getSettings('academy'), booking: getSettings('booking'), gst: getSettings('gst'), integrations: integrations(),
 }));
 
-route('PUT', 'settings/:group', ADMIN, async (c) => {
+route('PUT', 'settings/:group', 'settings', async (c) => {
   const group = oneOf(c.params.group, 'group', ['academy', 'booking', 'gst'] as const) as SettingsGroup;
   const b = await c.body();
   allowFields(b, Object.keys(DEFAULTS[group]));
@@ -607,30 +670,44 @@ route('PUT', 'settings/:group', ADMIN, async (c) => {
   return { [group]: getSettings(group) };
 });
 
-route('GET', 'users', ADMIN, () => ({ users: all('SELECT id, username, name, role, active, must_change, totp_secret IS NOT NULL AS totp, last_login_at, created_at FROM users ORDER BY id') }));
+/** A head coach's id for a junior's "reports to" (null = not set). */
+function headCoachId(v: unknown): number | null {
+  if (v === undefined || v === null || v === '') return null;
+  const id = int(v, 'Reports to', 1, 1e9);
+  if (!get("SELECT 1 FROM users WHERE id = ? AND role IN ('coach','admin') AND active = 1", id)) throw new HttpError(400, 'Pick an active head coach.');
+  return id;
+}
 
-route('POST', 'users', ADMIN, async (c) => {
+route('GET', 'users', 'team', () => ({ users: all('SELECT id, username, name, role, active, must_change, totp_secret IS NOT NULL AS totp, last_login_at, created_at, reports_to FROM users ORDER BY id') }));
+
+route('POST', 'users', 'team', async (c) => {
   const b = await c.body();
-  allowFields(b, ['username', 'name', 'role']);
+  allowFields(b, ['username', 'name', 'role', 'reportsTo']);
   const username = str(b.username, 'Username', 30).toLowerCase();
   if (!/^[a-z0-9._-]{3,30}$/.test(username)) throw new HttpError(400, 'Username: 3–30 letters, digits, dot, dash.');
   if (get('SELECT 1 FROM users WHERE username = ?', username)) throw new HttpError(409, 'That username is taken.');
   const password = generatePassword();
-  run('INSERT INTO users (username, name, role, password_hash, must_change, created_at) VALUES (?,?,?,?,1,?)', username, str(b.name, 'Name', 60), oneOf(b.role ?? 'coach', 'Role', ['admin', 'coach'] as const), await hashPassword(password), new Date().toISOString());
+  const role = oneOf(b.role ?? 'junior', 'Role', ROLES);
+  run('INSERT INTO users (username, name, role, password_hash, must_change, created_at, reports_to) VALUES (?,?,?,?,1,?,?)', username, str(b.name, 'Name', 60), role, await hashPassword(password), new Date().toISOString(), role === 'junior' ? headCoachId(b.reportsTo) : null);
   audit(c.user.username, 'user.add', 'user', username, { role: b.role });
   return { username, password };
 });
 
-route('PATCH', 'users/:id', ADMIN, async (c) => {
+route('PATCH', 'users/:id', 'team', async (c) => {
   const id = idParam(c);
   const b = await c.body();
-  allowFields(b, ['name', 'role', 'active', 'resetPassword', 'resetTotp']);
+  allowFields(b, ['name', 'role', 'active', 'resetPassword', 'resetTotp', 'reportsTo']);
   const u = userRow(id);
   if (!u) throw new HttpError(404, 'User not found.');
-  if (id === c.user.id && (b.active === false || b.role === 'coach')) throw new HttpError(400, 'You cannot demote or deactivate yourself.');
+  if (id === c.user.id && (b.active === false || (b.role !== undefined && b.role !== 'admin'))) throw new HttpError(400, 'You cannot demote or deactivate yourself.');
+  if (u.role === 'coach' && (b.active === false || (b.role !== undefined && b.role !== 'coach'))) {
+    const held = balances(u.username)[0];
+    if (held && held.onHand > 0) throw new HttpError(409, `${u.name} still has ₹${(held.onHand / 100).toFixed(2)} cash on their name. Confirm their deposit first.`);
+  }
   let password: string | undefined;
   if (b.name !== undefined) run('UPDATE users SET name = ? WHERE id = ?', str(b.name, 'Name', 60), id);
-  if (b.role !== undefined) run('UPDATE users SET role = ? WHERE id = ?', oneOf(b.role, 'Role', ['admin', 'coach'] as const), id);
+  if (b.role !== undefined) run('UPDATE users SET role = ? WHERE id = ?', oneOf(b.role, 'Role', ROLES), id);
+  if (b.reportsTo !== undefined) run('UPDATE users SET reports_to = ? WHERE id = ?', headCoachId(b.reportsTo), id);
   if (b.active !== undefined) run('UPDATE users SET active = ? WHERE id = ?', bool(b.active, 'active') ? 1 : 0, id);
   if (b.resetTotp === true) run('UPDATE users SET totp_secret = NULL WHERE id = ?', id);
   if (b.resetPassword === true) {
@@ -642,14 +719,14 @@ route('PATCH', 'users/:id', ADMIN, async (c) => {
   return { password };
 });
 
-route('GET', 'audit', ADMIN, (c) => {
+route('GET', 'audit', 'settings', (c) => {
   const before = c.query.get('before') ? Number(c.query.get('before')) : undefined;
   return { rows: recentAudit(200, before), check: verifyAudit() };
 });
 
 /* ---------------- files & exports (admin only) ---------------- */
 
-route('GET', 'media/:id', ADMIN, (c) => {
+route('GET', 'media/:id', 'money', (c) => {
   const m = readMedia(c.params.id, 'any');
   if (!m) throw new HttpError(404, 'File not found.');
   return new Response(new Uint8Array(m.body), {
@@ -661,7 +738,7 @@ route('GET', 'media/:id', ADMIN, (c) => {
   });
 });
 
-route('GET', 'export/:kind', ADMIN, (c) => {
+route('GET', 'export/:kind', 'money', (c) => {
   const { from, to } = range(c, 365);
   const kind = oneOf(c.params.kind, 'export', ['bookings', 'payments', 'invoices', 'expenses'] as const);
   const p = (n: number) => (n / 100).toFixed(2);
@@ -683,7 +760,7 @@ route('GET', 'export/:kind', ADMIN, (c) => {
   return new Response(csv(rows), { headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="gsa-${kind}-${from}-to-${to}.csv"`, 'Cache-Control': 'no-store' } });
 });
 
-route('GET', 'backup', ADMIN, async (c) => {
+route('GET', 'backup', 'settings', async (c) => {
   const fs = await import('node:fs');
   const os = await import('node:os');
   const path = await import('node:path');
@@ -722,14 +799,14 @@ export async function dispatch(req: Request, segments: string[]): Promise<{ resp
     }
   }
   if (!found) throw new HttpError(404, 'Not found.');
-  const user = await requireUser(req, found.r.roles, { allowMustChange: found.r.allowMustChange });
+  const user = await requireUser(req, found.r.perm, { allowMustChange: found.r.allowMustChange });
   const ctx: Ctx = { req, user, params: found.params, query: new URL(req.url).searchParams, body: () => readJsonBody(req, found!.r.bodyLimit ?? 32 * 1024) };
   const out = await found.r.h(ctx);
   if (out instanceof Response) return { response: out };
   return { data: out };
 }
 
-/** For tests: every route and the roles it allows. */
+/** For tests: every route and the permission it needs. */
 export function _routes() {
-  return routes.map((r) => ({ method: r.method, path: r.path, roles: r.roles }));
+  return routes.map((r) => ({ method: r.method, path: r.path, perm: r.perm }));
 }
