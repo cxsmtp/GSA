@@ -9,7 +9,7 @@ import { inputCls } from '@/components/ui/Field';
 import { BookingSheet } from './BookingSheet';
 import { Badge, Empty, Segmented, Spinner, useMe, useStaff } from './ui';
 
-type Row = { id: number; ref: string; date: string; name: string; phone: string; status: string; slots: string; amount: number; paid?: number; channel: string; source: string };
+type Row = { id: number; ref: string; date: string; name: string; phone: string; status: string; slots: string; amount: number; paid?: number; channel: string; source: string; payState: string; due: number; waSent: boolean };
 
 export function BookingsTab() {
   const me = useMe();
@@ -33,7 +33,7 @@ export function BookingsTab() {
       </form>
       {!query && (
         <div className="flex flex-wrap items-center gap-2">
-          <Segmented value={status} onChange={setStatus} options={[{ value: 'live', label: 'Active' }, { value: 'submitted', label: 'To verify' }, { value: 'reserved', label: 'Pay at desk' }, { value: 'confirmed', label: 'Confirmed' }, { value: 'cancelled', label: 'Cancelled' }, { value: 'all', label: 'All' }]} />
+          <Segmented value={status} onChange={setStatus} options={[{ value: 'live', label: 'Active' }, { value: 'submitted', label: 'To verify' }, { value: 'reserved', label: 'Payment due' }, { value: 'confirmed', label: 'Confirmed' }, { value: 'cancelled', label: 'Cancelled' }, { value: 'all', label: 'All' }]} />
           <input type="date" value={from} onChange={(e) => e.target.value && setFrom(e.target.value)} className="rounded-xl bg-panel border border-line px-3 py-1.5 text-sm" aria-label="From date" />
           {me.role === 'admin' && <a href={`/api/staff/export/bookings?from=${from}&to=${addDays(from, 30)}`} className="ml-auto inline-flex items-center gap-1 text-xs font-semibold text-cyan"><Download className="w-4 h-4" /> CSV</a>}
         </div>
@@ -57,7 +57,10 @@ export function BookingsTab() {
                     <div className="text-xs text-soft mt-0.5 truncate">{b.slots}</div>
                     <div className="flex justify-between text-[11px] text-muted mt-1">
                       <span className="font-mono">{b.ref} · {maskMobile(b.phone)}{b.channel === 'instagram' ? ' · Instagram' : ''}</span>
-                      <span>{rupees(b.amount)}{me.role === 'admin' && b.paid !== undefined && b.paid < b.amount && b.status !== 'cancelled' ? ` · due ${rupees(b.amount - b.paid)}` : ''}</span>
+                      <span>
+                        {b.waSent ? '✓ WhatsApp · ' : ''}
+                        {['cancelled', 'expired'].includes(b.status) ? rupees(b.amount) : b.payState === 'paid' ? <span className="text-ok">Paid {rupees(b.amount)}</span> : b.payState === 'verifying' ? <span className="text-[#b39dff]">Paid · verifying</span> : <span className="text-amber">Due {rupees(b.due)}</span>}
+                      </span>
                     </div>
                   </button>
                 </li>

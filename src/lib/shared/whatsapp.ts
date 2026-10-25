@@ -50,18 +50,30 @@ export function playerConfirmMessage(ref: string, code: string): string {
   return `Hi! Please confirm my court booking ${ref} · code ${code}`;
 }
 
-/** What the academy sends to the player once paid. */
-export function bookingConfirmedMessage(f: BookingMessageFacts): string {
+/**
+ * Where the money stands for a booking, as the player should read it:
+ *   paid       verified in full
+ *   verifying  paid (cash noted by the coach, or a UPI reference given) and being checked by the admin
+ *   due        nothing received yet (phone bookings: pay at the venue or online with the link)
+ */
+export type PayState = 'paid' | 'verifying' | 'due';
+
+/** What the academy sends to the player: confirmed or not, always with the payment position. */
+export function bookingConfirmedMessage(f: BookingMessageFacts & { payState?: PayState; due?: string }): string {
   const first = f.name.trim().split(/\s+/)[0] || '';
+  const state = f.payState ?? 'paid';
+  const payLine =
+    state === 'paid' ? `Payment: ${f.amount} received ✓` : state === 'verifying' ? `Payment: ${f.amount} received, being verified` : `Payment due: ${f.due ?? f.amount} (pay at the venue, or online with the link below)`;
   return [
-    `🏸 Booking confirmed${first ? `, ${first}` : ''}!`,
+    `🏸 Court booked${first ? `, ${first}` : ''}!`,
     ``,
     `${f.academy}`,
     `Ref: ${f.ref}`,
     `Date: ${f.dateLabel}`,
     `Court & time: ${f.slots}`,
-    `Paid: ${f.amount}`,
-    ...(f.link ? [``, `Booking & invoice: ${f.link}`] : []),
+    `Total: ${f.amount}`,
+    payLine,
+    ...(f.link ? [``, `${state === 'due' ? 'Your booking & payment' : 'Your booking & receipt'}: ${f.link}`] : []),
     ``,
     `Please arrive 10 minutes early with non-marking shoes. See you on court!`,
   ].join('\n');

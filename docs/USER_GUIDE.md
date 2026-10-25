@@ -3,7 +3,9 @@
 ## Daily
 - **Today**: who is on court, occupancy, money collected today, and a purple card when payments wait for you.
 - **Verify payments** (Money → Verify): open your bank/UPI business app, find the 12-digit reference and amount, tap **Verify**. The booking confirms, the invoice is made, then tap **Send … the confirmation** to WhatsApp the player (automatic if the WhatsApp API is set up). Not received? **Not received** releases the court.
-- **Walk-ins / phone bookings**: Today → Timetable, tap free slots → Book → name, number, Cash/UPI/At venue.
+- **Phone & walk-in bookings (admin or coach)**: Today → Timetable, tap the free slots → **Book** → player's name and WhatsApp number → payment: **Cash** / **UPI** (already received) or **Due** (pays later). Then tap **Send confirmation on WhatsApp**: your WhatsApp opens with the message to the player already typed — booking ref, date, court & time, total, and the payment position (*received ✓*, *received, being verified*, or *due ₹… with a link to pay online*). Just tap Send.
+- The player's link shows the same booking and status, and they can pay a due amount there by UPI app, QR or Razorpay. Money a coach notes is shown as "being verified" until the admin verifies it.
+- From any booking (Bookings → tap it) the admin or coach can send or re-send the WhatsApp confirmation, and mark **Cash received** / **UPI at desk** when the player pays later. Lists show Paid / Due and ✓ WhatsApp once sent.
 
 ## Courts & timetable (Courts)
 - **Blocks & batches**: block a court (or all) for coaching batches, tournaments, maintenance — one day or repeating weekdays for months. Blocked slots show as “Coaching”/“Event” to players.

@@ -1,8 +1,11 @@
 'use client';
 
+import { CheckCircle2 } from 'lucide-react';
 import { useState } from 'react';
+import { WhatsAppIcon } from '@/components/ui/BrandIcons';
 import { rupees } from '@/lib/shared/money';
 import { fmtDate, fmtTime } from '@/lib/shared/time';
+import { prettyMobile } from '@/lib/shared/whatsapp';
 import { Field, inputCls } from '@/components/ui/Field';
 import { Sheet } from '@/components/ui/Sheet';
 import type { Pick } from './StaffGrid';
@@ -17,24 +20,59 @@ export function NewBookingSheet({ open, onClose, date, picks, onDone }: { open: 
   const [note, setNote] = useState('');
   const [pay, setPay] = useState<'later' | 'cash' | 'upi' | 'card'>('cash');
   const [reference, setReference] = useState('');
+  const [done, setDone] = useState<{ id: number; ref: string; waLink: string | null; payState: string; due: number; amount: number; name: string; phone: string } | null>(null);
+  const close = () => {
+    if (done) onDone();
+    setDone(null);
+    onClose();
+  };
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const r = await run(
-      () => staff('bookings', 'POST', { date, slots: picks.map((p) => ({ courtId: p.courtId, start: p.start })), name, phone, note: note || undefined, pay: pay === 'later' ? undefined : { method: pay, reference: reference || undefined } }),
-      pay === 'later' ? 'Reserved — collect at the venue' : me.role === 'admin' ? 'Booked and paid' : 'Booked — payment sent to admin to verify',
+      () => staff<{ id: number; ref: string; waLink: string | null; payState: string; due: number; amount: number }>('bookings', 'POST', { date, slots: picks.map((p) => ({ courtId: p.courtId, start: p.start })), name, phone, note: note || undefined, pay: pay === 'later' ? undefined : { method: pay, reference: reference || undefined } }),
+      pay === 'later' ? 'Booked — payment due' : me.role === 'admin' ? 'Booked and paid' : 'Booked — payment sent to admin to verify',
     );
     if (r) {
+      setDone({ ...r, name, phone });
       setName('');
       setPhone('');
       setNote('');
       setReference('');
-      onDone();
     }
   };
   const total = picks.reduce((n, p) => n + p.price, 0);
   const methods = me.role === 'admin' ? (['cash', 'upi', 'card', 'later'] as const) : (['cash', 'upi', 'later'] as const);
+  if (done) {
+    return (
+      <Sheet open={open} onClose={close} title="Booked">
+        <div className="space-y-4 text-center">
+          <CheckCircle2 className="w-12 h-12 mx-auto text-ok" />
+          <div>
+            <div className="font-display text-lg font-bold">{done.ref}</div>
+            <div className="text-sm text-soft">{done.name} · {prettyMobile(`91${done.phone.replace(/\D/g, '').slice(-10)}`)}</div>
+          </div>
+          <div className={`rounded-xl px-3 py-2 text-sm font-semibold ${done.payState === 'paid' ? 'bg-ok/15 text-ok' : done.payState === 'verifying' ? 'bg-violet/20 text-[#b39dff]' : 'bg-amber/15 text-amber'}`}>
+            {done.payState === 'paid' ? `Paid ${rupees(done.amount)} ✓` : done.payState === 'verifying' ? `Paid ${rupees(done.amount)} · admin will verify` : `Payment due: ${rupees(done.due)}`}
+          </div>
+          {done.waLink && (
+            <a
+              href={done.waLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => void staff(`bookings/${done.id}/wa-sent`, 'POST')}
+              className="flex items-center justify-center gap-2 w-full rounded-2xl py-4 font-bold bg-[#25D366] text-ink"
+            >
+              <WhatsAppIcon className="w-5 h-5" /> Send confirmation on WhatsApp
+            </a>
+          )}
+          <p className="text-xs text-muted">The message has the booking, {done.payState === 'due' ? 'the amount due and a link to pay online' : 'the payment and a link to the booking'}. It opens your WhatsApp with everything typed — just tap Send.</p>
+          <Btn className="w-full" onClick={close}>Done</Btn>
+        </div>
+      </Sheet>
+    );
+  }
   return (
-    <Sheet open={open} onClose={onClose} title="Desk booking">
+    <Sheet open={open} onClose={onClose} title="Phone / desk booking">
       <form onSubmit={submit} className="space-y-3">
         <div className="rounded-2xl bg-night/60 border border-line p-3 text-sm">
           <div className="text-muted text-xs">{fmtDate(date)}</div>
@@ -45,10 +83,10 @@ export function NewBookingSheet({ open, onClose, date, picks, onDone }: { open: 
         <Field label="WhatsApp number"><input className={inputCls} value={phone} onChange={(e) => setPhone(e.target.value)} required inputMode="numeric" placeholder="10-digit mobile" /></Field>
         <Field label="Note (optional)"><input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} /></Field>
         <div>
-          <div className="text-sm font-medium text-soft mb-1.5">Payment</div>
+          <div className="text-sm font-medium text-soft mb-1.5">Payment <span className="text-xs text-muted font-normal">(Due = they pay later, at the venue or online)</span></div>
           <div className="grid grid-cols-4 gap-1.5">
             {methods.map((m) => (
-              <button type="button" key={m} onClick={() => setPay(m)} aria-pressed={pay === m} className={`rounded-xl py-2.5 text-xs font-bold capitalize border ${pay === m ? 'bg-lime text-ink border-lime' : 'border-line text-soft'}`}>{m === 'later' ? 'At venue' : m}</button>
+              <button type="button" key={m} onClick={() => setPay(m)} aria-pressed={pay === m} className={`rounded-xl py-2.5 text-xs font-bold capitalize border ${pay === m ? 'bg-lime text-ink border-lime' : 'border-line text-soft'}`}>{m === 'later' ? 'Due' : m}</button>
             ))}
           </div>
         </div>

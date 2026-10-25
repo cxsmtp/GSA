@@ -40,7 +40,7 @@ export function StaffGrid({ onChanged }: { onChanged?: () => void }) {
         <input type="date" value={date} onChange={(e) => e.target.value && setDate(e.target.value)} className="flex-1 rounded-xl bg-panel border border-line px-3 py-2 text-sm" aria-label="Date" />
         <button className="p-2 rounded-xl border border-line" onClick={() => setDate(addDays(date, 1))} aria-label="Next day"><ChevronRight className="w-4 h-4" /></button>
       </div>
-      <div className="text-xs text-muted">{fmtDate(date)} · tap free slots to book at the desk</div>
+      <div className="text-xs text-muted">{fmtDate(date)} · tap free slots for a phone or walk-in booking</div>
       {loading && !grid ? (
         <Spinner />
       ) : !grid?.open ? (

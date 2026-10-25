@@ -136,3 +136,22 @@ describe('security', () => {
     assert.ok(csv([['=HYPERLINK("x")', '-12.5']]).includes(`"'=HYPERLINK(""x"")",-12.5`));
   });
 });
+
+describe('phone bookings by the coach', () => {
+  test('WhatsApp confirmation states due → being verified → paid', async () => {
+    const { payStateOf, deskConfirmLink } = await import('../src/lib/server/whatsapp.ts');
+    const { recordPayment } = await import('../src/lib/server/payments.ts');
+    const b = createBooking({ ...base, phone: '919876500000', name: 'Phone Caller', slots: [{ courtId: 2, start: 12 * 60 }], source: 'desk', status: 'reserved', actor: 'coach1', staff: true });
+    assert.equal(payStateOf(b).payState, 'due');
+    const due = decodeURIComponent(deskConfirmLink(b, 'https://x.in')!);
+    assert.match(due, /^https:\/\/wa\.me\/919876500000\?text=/);
+    assert.match(due, /Payment due: ₹/);
+    assert.match(due, /https:\/\/x\.in\/pay\//);
+    const p = recordPayment({ bookingId: b.id, direction: 'in', category: 'court', method: 'cash', amount: b.amount_paise, reference: '', date: b.date, note: '', verified: false, actor: 'coach1' });
+    assert.equal(payStateOf(b).payState, 'verifying');
+    assert.match(decodeURIComponent(deskConfirmLink(b)!), /received, being verified/);
+    await verifyPayment(p.id, 'admin');
+    assert.equal(payStateOf(bookingById(b.id)!).payState, 'paid');
+    assert.match(decodeURIComponent(deskConfirmLink(bookingById(b.id)!)!), /received ✓/);
+  });
+});

@@ -12,7 +12,7 @@ import { Badge, Btn, Spinner, staff, useAction, useMe, useToast } from './ui';
 
 interface Detail {
   booking: {
-    id: number; ref: string; date: string; name: string; phone: string; status: string; source: string; channel: string; slots: string; amount: number; paid?: number;
+    id: number; ref: string; date: string; name: string; phone: string; status: string; source: string; channel: string; slots: string; amount: number; paid?: number; payState: string; due: number;
     note: string; email: string; gstin: string; token: string; cancelReason: string; createdBy: string | null; createdAt: string; waSent: boolean; waOpened: boolean; code: string;
   };
   payments: { id: number; method: string; status: string; direction: string; amount_paise?: number; reference?: string; created_at: string; created_by?: string }[];
@@ -54,7 +54,6 @@ export function BookingSheet({ id, onClose, onChanged }: { id: number | null; on
   };
 
   const b = d?.booking;
-  const due = b ? b.amount - (b.paid ?? 0) : 0;
   return (
     <Sheet open={id !== null} onClose={onClose} title={b ? b.ref : 'Booking'}>
       {!d || !b ? (
@@ -72,7 +71,7 @@ export function BookingSheet({ id, onClose, onChanged }: { id: number | null; on
             <div className="font-semibold">{fmtDate(b.date)}</div>
             <div className="text-soft">{b.slots}</div>
             <div className="flex justify-between pt-1"><span className="text-muted">Amount</span><span className="font-bold">{rupees(b.amount)}</span></div>
-            {admin && <div className="flex justify-between"><span className="text-muted">Paid</span><span className={due > 0 ? 'text-amber font-bold' : 'text-ok font-bold'}>{rupees(b.paid ?? 0)}</span></div>}
+            <div className="flex justify-between"><span className="text-muted">Payment</span><span className={`font-bold ${b.payState === 'paid' ? 'text-ok' : b.payState === 'verifying' ? 'text-[#b39dff]' : 'text-amber'}`}>{b.payState === 'paid' ? 'Paid ✓' : b.payState === 'verifying' ? 'Paid · being verified' : `Due ${rupees(b.due)}`}</span></div>
             <div className="flex justify-between text-xs text-muted pt-1"><span>{b.source === 'desk' ? `Desk · ${b.createdBy}` : `Online · via ${b.channel}`}</span><span>{fmtStamp(b.createdAt)}</span></div>
             {b.gstin && <div className="text-xs text-muted">GSTIN {b.gstin}</div>}
             {b.note && <div className="text-xs text-amber">{b.note}</div>}
@@ -93,9 +92,10 @@ export function BookingSheet({ id, onClose, onChanged }: { id: number | null; on
           )}
 
           <div className="grid grid-cols-2 gap-2">
+            {d.waLink && b.waSent && <p className="col-span-2 text-center text-xs text-ok">✓ Confirmation sent on WhatsApp</p>}
             {d.waLink && (
-              <a href={d.waLink} target="_blank" rel="noopener noreferrer" onClick={() => void staff(`bookings/${b.id}/wa-sent`, 'POST').then(onChanged)} className="col-span-2 flex items-center justify-center gap-2 rounded-xl py-3 font-bold bg-[#25D366] text-ink">
-                <WhatsAppIcon className="w-5 h-5" /> {b.waSent ? 'Send confirmation again' : 'Send confirmation on WhatsApp'}
+              <a href={d.waLink} target="_blank" rel="noopener noreferrer" onClick={() => void staff(`bookings/${b.id}/wa-sent`, 'POST').then(() => { if (id) void load(id); onChanged(); })} className="col-span-2 flex items-center justify-center gap-2 rounded-xl py-3 font-bold bg-[#25D366] text-ink">
+                <WhatsAppIcon className="w-5 h-5" /> {b.waSent ? 'Send WhatsApp confirmation again' : `Send confirmation on WhatsApp${b.payState === 'due' ? ' (with amount due)' : ''}`}
               </a>
             )}
             {['held', 'reserved', 'submitted', 'expired'].includes(b.status) && (

@@ -1,7 +1,7 @@
 import { rupees } from '@/lib/shared/money';
-import { bookingConfirmedMessage, waMeLink } from '@/lib/shared/whatsapp';
+import { bookingConfirmedMessage, waMeLink, type PayState } from '@/lib/shared/whatsapp';
 import { bookingFacts, type BookingRow } from './bookings';
-import { run } from './db';
+import { get, run } from './db';
 import { logEvent } from './log';
 import { appUrl, getSettings, integrations } from './settings';
 
@@ -17,13 +17,34 @@ import { appUrl, getSettings, integrations } from './settings';
  * {{1}} name, {{2}} booking ref, {{3}} date, {{4}} court & time, {{5}} amount paid.
  */
 
-export function confirmationText(b: BookingRow, base = ''): string {
-  const a = getSettings('academy');
-  return bookingConfirmedMessage({ ...bookingFacts(b), amount: rupees(b.amount_paise), academy: a.name, link: base ? `${base}/pay/${b.token}` : undefined });
+/**
+ * Paid, being verified, or due — and how much is still due. Shown to admin and coach alike. Money the
+ * coach noted at the desk, or a UPI reference the player typed, counts as "being verified" until the admin
+ * checks it (an unfinished Razorpay checkout does not count).
+ */
+export function payStateOf(b: BookingRow): { payState: PayState; due: number } {
+  const r = get<{ verified: number | null; pending: number | null }>(
+    `SELECT SUM(CASE WHEN status = 'verified' THEN (CASE direction WHEN 'in' THEN amount_paise ELSE -amount_paise END) ELSE 0 END) AS verified,
+            SUM(CASE WHEN status = 'pending' AND direction = 'in' AND (reference <> '' OR created_by <> 'player') THEN amount_paise ELSE 0 END) AS pending
+       FROM payments WHERE booking_id = ?`,
+    b.id,
+  );
+  const verified = r?.verified ?? 0;
+  const pending = r?.pending ?? 0;
+  if (verified >= b.amount_paise) return { payState: 'paid', due: 0 };
+  if (verified + pending >= b.amount_paise) return { payState: 'verifying', due: 0 };
+  return { payState: 'due', due: b.amount_paise - verified - pending };
 }
 
-/** The desk's one-tap link to send the confirmation from their own WhatsApp. */
+export function confirmationText(b: BookingRow, base = ''): string {
+  const a = getSettings('academy');
+  const { payState, due } = payStateOf(b);
+  return bookingConfirmedMessage({ ...bookingFacts(b), amount: rupees(b.amount_paise), due: rupees(due), payState, academy: a.name, link: base ? `${base}/pay/${b.token}` : undefined });
+}
+
+/** The one-tap link (admin or coach) to send the booking confirmation from their own WhatsApp, for any live booking. */
 export function deskConfirmLink(b: BookingRow, base = ''): string | null {
+  if (!['held', 'reserved', 'submitted', 'confirmed'].includes(b.status)) return null;
   return waMeLink(b.phone, confirmationText(b, base));
 }
 

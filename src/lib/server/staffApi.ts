@@ -19,7 +19,7 @@ import { buildDay } from './schedule';
 import { appUrl, DEFAULTS, getSettings, integrations, saveSettings, type SettingsGroup } from './settings';
 import { encrypt, randomToken } from './secrets';
 import { newTotpSecret, otpauthUri, verifyTotp } from './totp';
-import { deskConfirmLink } from './whatsapp';
+import { deskConfirmLink, payStateOf } from './whatsapp';
 import { enforce } from './rateLimit';
 
 /**
@@ -131,7 +131,9 @@ route('POST', 'totp/disable', BOTH, async (c) => {
 /* ---------------- today & timetable ---------------- */
 
 function bookingListItem(b: BookingRow, admin: boolean) {
+  const { payState, due } = payStateOf(b);
   return {
+    payState, due,
     id: b.id, ref: b.ref, date: b.date, name: b.name, phone: b.phone, status: b.status, source: b.source, channel: b.channel,
     slots: slotsLabel(slotsOf(b)), count: slotsOf(b).length, amount: b.amount_paise, createdAt: b.created_at,
     paid: admin ? paidTotal(b.id) : undefined, note: b.note, waSent: Boolean(b.wa_sent_at), waOpened: Boolean(b.wa_opened_at),
@@ -205,7 +207,7 @@ route('GET', 'bookings/:id', BOTH, (c) => {
     booking: { ...bookingListItem(b, admin), email: b.email, gstin: b.gstin, token: b.token, cancelReason: b.cancel_reason, slotList: slotsOf(b), createdBy: b.created_by, holdExpiresAt: b.hold_expires_at, code: b.confirm_code },
     payments: admin ? paymentsForBooking(b.id) : paymentsForBooking(b.id).map((p) => ({ id: p.id, method: p.method, status: p.status, direction: p.direction, created_at: p.created_at })),
     invoice: admin ? invoice ?? null : null,
-    waLink: b.status === 'confirmed' ? deskConfirmLink(b, appUrl(c.req)) : null,
+    waLink: deskConfirmLink(b, appUrl(c.req)),
     payLink: `${appUrl(c.req)}/pay/${b.token}`,
   };
 });
@@ -239,7 +241,8 @@ route('POST', 'bookings', BOTH, async (c) => {
     if (c.user.role === 'admin') await confirmPaidBooking(b.id, c.user.username);
     else setStatus(b.id, 'submitted');
   }
-  return { id: b.id, ref: b.ref };
+  const fresh = bookingById(b.id)!;
+  return { id: b.id, ref: b.ref, waLink: deskConfirmLink(fresh, appUrl(c.req)), ...payStateOf(fresh), amount: fresh.amount_paise };
 });
 
 route('POST', 'bookings/:id/collected', BOTH, async (c) => {
@@ -254,7 +257,7 @@ route('POST', 'bookings/:id/collected', BOTH, async (c) => {
   recordPayment({ bookingId: b.id, direction: 'in', category: 'court', method, amount: Math.max(due, 1), reference: str(body.reference, 'Reference', 40, { required: false }), date: todayIst(), note: admin ? 'Collected by admin' : `Collected by coach ${c.user.name}`, verified: admin, actor: c.user.username });
   if (admin) await confirmPaidBooking(b.id, c.user.username);
   else if (b.status !== 'submitted') setStatus(b.id, 'submitted');
-  return {};
+  return { waLink: deskConfirmLink(bookingById(b.id)!, appUrl(c.req)) };
 });
 
 route('POST', 'bookings/:id/cancel', BOTH, async (c) => {

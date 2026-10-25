@@ -207,7 +207,7 @@ export function razorpayOn(): boolean {
 
 export async function razorpayOrder(b: BookingRow): Promise<{ orderId: string; keyId: string; amount: number }> {
   if (!razorpayOn()) throw new HttpError(404, 'Online gateway is not set up.');
-  if (b.status !== 'held') throw new HttpError(409, b.status === 'expired' ? 'Your hold ran out. Please book again.' : 'This booking is not waiting for payment.');
+  if (b.status !== 'held' && b.status !== 'reserved') throw new HttpError(409, b.status === 'expired' ? 'Your hold ran out. Please book again.' : 'This booking is not waiting for payment.');
   const existing = get<PaymentRow>("SELECT * FROM payments WHERE booking_id = ? AND method = 'razorpay' AND status = 'pending' AND gateway_order_id IS NOT NULL ORDER BY id DESC LIMIT 1", b.id);
   extendHold(b.id, 10);
   if (existing && existing.amount_paise === b.amount_paise) return { orderId: existing.gateway_order_id!, keyId: process.env.RAZORPAY_KEY_ID!, amount: b.amount_paise };

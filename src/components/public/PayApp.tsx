@@ -75,10 +75,10 @@ export function PayApp({ initial }: { initial: PublicBooking }) {
       <StatusHero b={b} timer={b.status === 'held' ? `${mm}:${String(ss).padStart(2, '0')}` : ''} />
       <Summary b={b} />
 
-      {(b.status === 'held' || b.status === 'expired') && (
+      {(b.status === 'held' || b.status === 'expired' || b.status === 'reserved') && (
         <>
           {inApp && b.upi && <InAppNotice which={inApp} os={os} />}
-          {b.razorpay && b.status === 'held' && <RazorpayButton b={b} onDone={setB} />}
+          {b.razorpay && <RazorpayButton b={b} onDone={setB} />}
           {b.upi && <UpiPanel b={b} os={os} />}
           {!b.upi && !b.razorpay && (
             <div className="rounded-3xl border border-amber/40 bg-amber/10 p-4 text-sm">Online payment isn&apos;t set up yet. Please pay at the desk or call {b.academy.phone || 'us'}; your slots are held for now.</div>
@@ -87,9 +87,9 @@ export function PayApp({ initial }: { initial: PublicBooking }) {
         </>
       )}
 
-      {(b.status === 'submitted' || b.status === 'confirmed' || b.status === 'held') && b.whatsappConfirm && <WhatsAppBlock b={b} />}
+      {!b.phoneBooking && (b.status === 'submitted' || b.status === 'confirmed' || b.status === 'held') && b.whatsappConfirm && <WhatsAppBlock b={b} />}
 
-      {b.status === 'confirmed' && <ConfirmedActions b={b} />}
+      {['confirmed', 'reserved', 'submitted'].includes(b.status) && <ConfirmedActions b={b} />}
 
       {(b.status === 'expired' || b.status === 'cancelled') && (
         <Link href="/" className="btn-lime block text-center rounded-2xl py-4 font-bold">Book again</Link>
@@ -101,8 +101,8 @@ export function PayApp({ initial }: { initial: PublicBooking }) {
 function StatusHero({ b, timer }: { b: PublicBooking; timer: string }) {
   const map = {
     held: { title: 'Pay to confirm', sub: 'Your court is held for you', tone: 'text-lime', icon: Zap },
-    submitted: { title: 'Payment received', sub: 'We are verifying it — confirmation comes on WhatsApp', tone: 'text-cyan', icon: Loader2 },
-    reserved: { title: 'Reserved', sub: 'Pay at the desk when you arrive', tone: 'text-cyan', icon: CalendarDays },
+    submitted: { title: b.phoneBooking ? 'Court booked' : 'Payment received', sub: b.phoneBooking ? 'Payment received — being verified' : 'We are verifying it — confirmation comes on WhatsApp', tone: 'text-cyan', icon: b.phoneBooking ? CheckCircle2 : Loader2 },
+    reserved: { title: 'Court booked', sub: 'Payment due — pay at the venue, or right here now', tone: 'text-cyan', icon: CalendarDays },
     confirmed: { title: "You're on court!", sub: 'Booking confirmed', tone: 'text-ok', icon: CheckCircle2 },
     expired: { title: 'Hold expired', sub: 'Already paid? Enter your UPI reference below and we will restore it', tone: 'text-amber', icon: TriangleAlert },
     cancelled: { title: 'Cancelled', sub: b.cancelReason || 'This booking was cancelled', tone: 'text-bad', icon: TriangleAlert },
@@ -115,7 +115,7 @@ function StatusHero({ b, timer }: { b: PublicBooking; timer: string }) {
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className={`flex items-center gap-2 ${s.tone}`}>
-            <Icon className={`w-5 h-5 ${b.status === 'submitted' ? 'animate-spin' : ''}`} aria-hidden="true" />
+            <Icon className={`w-5 h-5 ${b.status === 'submitted' && !b.phoneBooking ? 'animate-spin' : ''}`} aria-hidden="true" />
             <span className="text-xs font-bold uppercase tracking-wider">{b.ref}</span>
           </div>
           <h1 className="font-display text-2xl sm:text-3xl font-extrabold mt-2">{s.title}</h1>
@@ -149,6 +149,11 @@ function Summary({ b }: { b: PublicBooking }) {
         <span className="text-sm text-soft">{b.name}</span>
         <span className="font-display text-2xl font-extrabold">{b.amountLabel}</span>
       </div>
+      {b.status !== 'cancelled' && b.status !== 'expired' && (
+        <div className={`mt-3 rounded-xl px-3 py-2 text-sm font-semibold text-center ${b.payState === 'paid' ? 'bg-ok/15 text-ok' : b.payState === 'verifying' ? 'bg-violet/20 text-[#b39dff]' : 'bg-amber/15 text-amber'}`}>
+          {b.payState === 'paid' ? 'Paid ✓' : b.payState === 'verifying' ? 'Paid · being verified' : `Payment due: ${b.amountLabel}`}
+        </div>
+      )}
     </section>
   );
 }

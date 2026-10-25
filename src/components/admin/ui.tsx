@@ -142,7 +142,7 @@ const STATUS_STYLE: Record<string, string> = {
   rejected: 'bg-bad/15 text-bad',
   issued: 'bg-ok/15 text-ok',
 };
-const STATUS_LABEL: Record<string, string> = { held: 'Awaiting payment', submitted: 'Verify payment', reserved: 'Pay at desk' };
+const STATUS_LABEL: Record<string, string> = { held: 'Awaiting payment', submitted: 'Verify payment', reserved: 'Payment due' };
 
 export function Badge({ s }: { s: string }) {
   return <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-bold capitalize whitespace-nowrap ${STATUS_STYLE[s] || 'bg-line text-soft'}`}>{STATUS_LABEL[s] || s}</span>;

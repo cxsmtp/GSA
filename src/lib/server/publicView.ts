@@ -4,6 +4,7 @@ import { fmtDate } from '@/lib/shared/time';
 import { slotsLabel, slotsOf, sweepExpired, type BookingRow } from './bookings';
 import { get } from './db';
 import { razorpayOn, upiLink } from './payments';
+import { payStateOf } from './whatsapp';
 import { ensureFirstAdmin } from './auth';
 import { getSettings, integrations } from './settings';
 import type { PublicConfig } from '@/lib/shared/types';
@@ -59,10 +60,13 @@ export function publicBooking(b: BookingRow) {
     holdExpiresAt: fresh.status === 'held' ? fresh.hold_expires_at : null,
     cancelReason: fresh.cancel_reason,
     pendingReference: pending?.reference ?? null,
-    upi: fresh.status === 'held' || fresh.status === 'expired' ? (bk.upiEnabled ? upiLink(fresh.amount_paise, fresh.ref) : null) : null,
+    // Online holds, and phone bookings with money still due, can be paid from this page.
+    upi: ['held', 'expired', 'reserved'].includes(fresh.status) ? (bk.upiEnabled ? upiLink(fresh.amount_paise, fresh.ref) : null) : null,
     upiVpa: bk.upiEnabled ? a.upiVpa : '',
     upiPayee: a.upiPayee || a.name,
-    razorpay: razorpayOn() && fresh.status === 'held',
+    razorpay: razorpayOn() && (fresh.status === 'held' || fresh.status === 'reserved'),
+    payState: payStateOf(fresh).payState,
+    phoneBooking: fresh.source === 'desk',
     whatsappConfirm: waMeLink(a.whatsapp, playerConfirmMessage(fresh.ref, fresh.confirm_code)),
     waAuto: integrations().whatsappApi,
     invoice: invoice ? { token: invoice.token, number: invoice.number } : null,
