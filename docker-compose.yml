@@ -23,26 +23,44 @@ services:
     security_opt: ["no-new-privileges:true"]
     pids_limit: 256
     stop_grace_period: 20s
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     logging: &logging
       driver: json-file
       options: { max-size: "10m", max-file: "5" }
 
   caddy:
-    image: caddy:2-alpine
+    # Caddy 2.11.7 rebuilt with patched dependencies (deploy/caddy-build).
+    build: ./deploy/caddy-build
     restart: unless-stopped
     env_file: .env.production
+    # A public HTTPS site has to answer on 80 and 443 of every interface.
     ports:
-      - "80:80"
-      - "443:443"
-      - "443:443/udp"
+      - "0.0.0.0:80:80"
+      - "0.0.0.0:443:443"
+      - "0.0.0.0:443:443/udp"
     volumes:
       - ./deploy:/etc/caddy:ro
       - caddy-data:/data
       - caddy-config:/config
+    # No capabilities at all: binding 80/443 is allowed through this namespaced sysctl instead.
     cap_drop: [ALL]
-    cap_add: [NET_BIND_SERVICE]
+    sysctls:
+      net.ipv4.ip_unprivileged_port_start: 0
     security_opt: ["no-new-privileges:true"]
-    depends_on: [app]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:2019/config/"]
+      interval: 1m
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    depends_on:
+      app:
+        condition: service_healthy
     logging: *logging
 
 volumes:

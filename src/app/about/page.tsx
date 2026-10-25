@@ -7,6 +7,7 @@ import { all } from '@/lib/server/db';
 import { startup } from '@/lib/server/publicView';
 import { getSettings } from '@/lib/server/settings';
 import { fmtTime } from '@/lib/shared/time';
+import { safeHttpsUrl } from '@/lib/shared/url';
 
 export const dynamic = 'force-dynamic';
 export const metadata: Metadata = { title: 'About us' };
@@ -21,6 +22,7 @@ export default async function AboutPage() {
   const b = getSettings('booking');
   const people = all<Person>('SELECT id, name, role, bio, highlights, photo_media FROM people WHERE visible = 1 ORDER BY sort, id');
   const open = b.hours.find((h) => !h.closed);
+  const mapUrl = safeHttpsUrl(a.mapUrl);
   return (
     <>
       <SiteHeader />
@@ -85,7 +87,7 @@ export default async function AboutPage() {
             <MapPin className="w-5 h-5 text-pink" />
             <h3 className="mt-2 font-semibold">Find us</h3>
             <p className="text-sm text-soft">{[a.address, a.city].filter(Boolean).join(', ')}</p>
-            {a.mapUrl && <a href={a.mapUrl} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-sm font-semibold text-cyan">Open in Maps →</a>}
+            {mapUrl && <a href={mapUrl} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-sm font-semibold text-cyan">Open in Maps →</a>}
           </div>
           <div className="rounded-3xl border border-line bg-panel/70 p-5 space-y-2">
             <Phone className="w-5 h-5 text-cyan" />

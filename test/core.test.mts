@@ -180,7 +180,7 @@ describe('phone bookings by the manager', () => {
 });
 
 describe('cash custody', () => {
-  test("a assistant's cash goes on the manager's name until a confirmed deposit", async () => {
+  test("an assistant's cash goes on the manager's name until a confirmed deposit", async () => {
     const { run: exec } = await import('../src/lib/server/db.ts');
     const { custodianFor, balances, createDeposit, decideDeposit } = await import('../src/lib/server/cash.ts');
     const { recordPayment } = await import('../src/lib/server/payments.ts');

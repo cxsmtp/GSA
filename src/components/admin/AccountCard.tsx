@@ -44,7 +44,8 @@ export function AccountCard({ passwordOnly = false, onSignedOut }: { passwordOnl
           ) : setup ? (
             <div className="space-y-3">
               <p className="text-sm text-soft">Scan with Google Authenticator / Microsoft Authenticator, then type the 6-digit code it shows.</p>
-              <div className="mx-auto w-48 rounded-2xl bg-white p-2" dangerouslySetInnerHTML={{ __html: setup.qr }} />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={setup.qr} alt="Scan this QR code with your authenticator app" className="mx-auto w-48 rounded-2xl bg-white p-2" />
               <p className="text-center font-mono text-xs text-muted break-all">{setup.secret}</p>
               <input className={`${inputCls} text-center font-mono tracking-[0.4em]`} inputMode="numeric" value={code} onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))} placeholder="000000" />
               <Btn tone="lime" busy={busy} className="w-full" onClick={async () => (await run(() => staff('totp/enable', 'POST', { secret: setup.secret, code }), '2-step sign-in is on')) && (setTotpOn(true), setSetup(null))}>Turn on</Btn>

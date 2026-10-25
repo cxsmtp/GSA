@@ -286,6 +286,7 @@ function DetailsSheet({
   const [gstin, setGstin] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [remember, setRemember] = useState(false);
   const hp = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -293,7 +294,7 @@ function DetailsSheet({
       const saved = JSON.parse(localStorage.getItem('gsa_player') || '{}');
       if (saved.name) setName(saved.name);
       if (saved.phone) setPhone(saved.phone);
-      if (saved.email) setEmail(saved.email);
+      if (saved.name || saved.phone) setRemember(true);
     } catch {
       // ignore
     }
@@ -309,10 +310,12 @@ function DetailsSheet({
       const r = await api<{ token: string; ref: string }>('/api/public/bookings', {
         body: { date, slots: sel.map((s) => ({ spaceId: s.spaceId, start: s.start })), name, phone: digits, email: email || undefined, gstin: gstOn && gstin ? gstin : undefined, channel: detectChannel(), website: hp.current?.value || undefined },
       });
+      // Only when the player asks: name and number, never email or GSTIN.
       try {
-        localStorage.setItem('gsa_player', JSON.stringify({ name, phone: digits, email }));
+        if (remember) localStorage.setItem('gsa_player', JSON.stringify({ name, phone: digits }));
+        else localStorage.removeItem('gsa_player');
       } catch {
-        // ignore
+        // private mode: fine
       }
       onDone(r.token, r.ref);
     } catch (e2) {
@@ -362,6 +365,9 @@ function DetailsSheet({
             <input id="bk-gstin" className={`${inputCls} uppercase`} value={gstin} onChange={(e) => setGstin(e.target.value.toUpperCase())} maxLength={15} placeholder="08ABCDE1234F1Z5" />
           </Field>
         )}
+        <label className="flex items-center gap-3 text-sm text-soft">
+          <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)} className="w-5 h-5 accent-lime" /> Remember my name &amp; number on this phone
+        </label>
         <input ref={hp} name="website" tabIndex={-1} autoComplete="off" className="hidden" aria-hidden="true" />
         {err && <p role="alert" className="text-sm text-bad">{err}</p>}
         <button type="submit" disabled={busy} className="btn-lime w-full rounded-2xl py-4 font-bold text-base flex items-center justify-center gap-2">

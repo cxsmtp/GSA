@@ -4,6 +4,7 @@ import { toPaise } from '@/lib/shared/money';
 import { addDays, isValidDate, parseHhmm, todayIst } from '@/lib/shared/time';
 import { BLOCK_KINDS, EXPENSE_CATEGORIES, INCOME_CATEGORIES, PAY_METHODS, type SlotRef } from '@/lib/shared/types';
 import { can, ROLES, type Permission } from '@/lib/shared/rbac';
+import { safeHttpsUrl } from '@/lib/shared/url';
 import { normalizeIndianMobile } from '@/lib/shared/whatsapp';
 import { audit, recentAudit, verifyAudit } from './audit';
 import { endSessions, requireUser, userRow, type SessionUser } from './auth';
@@ -106,7 +107,7 @@ route('POST', 'password', 'account', async (c) => {
 route('POST', 'totp/setup', 'account', async (c) => {
   const secret = newTotpSecret();
   const uri = otpauthUri(secret, c.user.username, getSettings('business').name);
-  return { secret, qr: await QRCode.toString(uri, { type: 'svg', margin: 1 }) };
+  return { secret, qr: await QRCode.toDataURL(uri, { margin: 1, width: 360 }) };
 });
 
 route('POST', 'totp/enable', 'account', async (c) => {
@@ -638,7 +639,7 @@ route('PUT', 'settings/:group', 'settings', async (c) => {
     if (next.upiVpa && !/^[a-zA-Z0-9._-]{2,256}@[a-zA-Z]{2,64}$/.test(String(next.upiVpa))) throw new HttpError(400, 'UPI ID looks wrong (example: name@okhdfcbank).');
     if (next.instagram) next.instagram = String(next.instagram).replace(/^@/, '').replace(/^https?:\/\/(www\.)?instagram\.com\//, '').replace(/\/.*$/, '');
     if (next.instagram && !/^[A-Za-z0-9._]{1,30}$/.test(String(next.instagram))) throw new HttpError(400, 'Instagram: just the username, like yourbusiness.');
-    if (next.mapUrl && !/^https:\/\//.test(String(next.mapUrl))) throw new HttpError(400, 'Map link must start with https://');
+    if (next.mapUrl && !safeHttpsUrl(next.mapUrl)) throw new HttpError(400, 'Map link must be a full https:// link.');
     if (next.stateCode && !STATES[String(next.stateCode)]) throw new HttpError(400, 'State code is not valid.');
     next.state = next.stateCode ? STATES[String(next.stateCode)] : '';
   } else if (group === 'booking') {

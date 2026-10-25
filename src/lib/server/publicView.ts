@@ -8,6 +8,7 @@ import { ensureFirstAdmin } from './auth';
 import { getSettings, integrations } from './settings';
 import type { PublicConfig } from '@/lib/shared/types';
 import { todayIst } from '@/lib/shared/time';
+import { safeHttpsUrl } from '@/lib/shared/url';
 
 let started = false;
 /** One-time start-up work on the first request. */
@@ -24,7 +25,7 @@ export function publicConfig(): PublicConfig {
   const b = getSettings('booking');
   const g = getSettings('gst');
   return {
-    business: { name: a.name, tagline: a.tagline, city: a.city, phone: a.phone, whatsapp: a.whatsapp, address: a.address, mapUrl: a.mapUrl, email: a.email, instagram: a.instagram },
+    business: { name: a.name, tagline: a.tagline, city: a.city, phone: a.phone, whatsapp: a.whatsapp, address: a.address, mapUrl: safeHttpsUrl(a.mapUrl) ?? '', email: a.email, instagram: a.instagram },
     booking: { daysAhead: b.daysAhead, maxSlots: b.maxSlots, holdMinutes: b.holdMinutes, slotMinutes: b.slotMinutes },
     gst: { mode: g.mode, ratePct: g.ratePct, pricesIncludeGst: g.pricesIncludeGst },
     pay: { upi: b.upiEnabled && Boolean(a.upiVpa), razorpay: razorpayOn() },
@@ -70,6 +71,6 @@ export function publicBooking(b: BookingRow) {
     tellManager: fresh.source === 'online' ? playerBookedLink(fresh) : null,
     toldManager: Boolean(fresh.wa_opened_at),
     invoice: invoice ? { token: invoice.token, number: invoice.number } : null,
-    business: { name: a.name, phone: a.phone, whatsapp: a.whatsapp, mapUrl: a.mapUrl, address: a.address },
+    business: { name: a.name, phone: a.phone, whatsapp: a.whatsapp, mapUrl: safeHttpsUrl(a.mapUrl) ?? '', address: a.address },
   };
 }

@@ -34,5 +34,8 @@
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "debug": "4.4.3"
   }
 }

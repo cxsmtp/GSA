@@ -37,7 +37,7 @@ export async function POST(req: Request, ctx: Ctx) {
     switch (body.action) {
       case 'utr': {
         enforce(`utr:${b.id}`, 6, 60 * 60_000, 'Too many tries. Please call us.');
-        submitUtr(b, str(body.utr, 'UPI reference', 40));
+        await submitUtr(b, str(body.utr, 'UPI reference', 40));
         break;
       }
       case 'wa_opened':
