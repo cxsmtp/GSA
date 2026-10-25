@@ -3,7 +3,7 @@ import { dataFile } from './dataDir';
 
 /**
  * One SQLite database (DATA_DIR/gsa.db) through Node's built-in driver: nothing native to compile,
- * so the same code runs on a Hostinger VPS (Docker) and on Hostinger's managed Node.js hosting.
+ * so it runs on managed Node.js hosting as is.
  *
  * Schema changes are new numbered entries at the end of MIGRATIONS; never edit one that has shipped.
  * Money is whole paise (integers). Dates are IST 'YYYY-MM-DD'; slot times are minutes since midnight.

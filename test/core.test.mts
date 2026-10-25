@@ -139,14 +139,17 @@ describe('security', () => {
     for (const p of ['bookings.edit', 'bookings.cancel', 'schedule.manage', 'about.manage', 'cash.custody', 'money', 'settings', 'team'] as const) assert.ok(!can('assistant', p), p);
   });
   test('Razorpay signatures', async () => {
-    process.env.RAZORPAY_KEY_SECRET = 'secret';
-    process.env.RAZORPAY_WEBHOOK_SECRET = 'whsec';
     const crypto = await import('node:crypto');
-    const sig = crypto.createHmac('sha256', 'secret').update('order_1|pay_1').digest('hex');
+    // Throwaway keys made for this test run only.
+    const keySecret = crypto.randomBytes(24).toString('hex');
+    const hookSecret = crypto.randomBytes(24).toString('hex');
+    process.env.RAZORPAY_KEY_SECRET = keySecret;
+    process.env.RAZORPAY_WEBHOOK_SECRET = hookSecret;
+    const sig = crypto.createHmac('sha256', keySecret).update('order_1|pay_1').digest('hex');
     assert.ok(razorpaySignatureOk('order_1', 'pay_1', sig));
     assert.ok(!razorpaySignatureOk('order_1', 'pay_2', sig));
     const body = Buffer.from('{"event":"x"}');
-    assert.ok(webhookSignatureOk(body, crypto.createHmac('sha256', 'whsec').update(body).digest('hex')));
+    assert.ok(webhookSignatureOk(body, crypto.createHmac('sha256', hookSecret).update(body).digest('hex')));
     assert.ok(!webhookSignatureOk(body, 'bad'));
   });
   test('TOTP accepts the current code only', () => {
