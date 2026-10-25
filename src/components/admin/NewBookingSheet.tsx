@@ -3,6 +3,7 @@
 import { CheckCircle2 } from 'lucide-react';
 import { useState } from 'react';
 import { WhatsAppIcon } from '@/components/ui/BrandIcons';
+import { EMPTY_PARTICIPANT, ParticipantFields, participantBody, participantProblem, type ParticipantState } from '@/components/ui/ParticipantFields';
 import { rupees } from '@/lib/shared/money';
 import { fmtDate, fmtTime } from '@/lib/shared/time';
 import { prettyMobile } from '@/lib/shared/whatsapp';
@@ -20,6 +21,7 @@ export function NewBookingSheet({ open, onClose, date, picks, onDone }: { open: 
   const [note, setNote] = useState('');
   const [pay, setPay] = useState<'later' | 'cash' | 'upi' | 'card'>('cash');
   const [reference, setReference] = useState('');
+  const [who, setWho] = useState<ParticipantState>(EMPTY_PARTICIPANT);
   const [done, setDone] = useState<{ id: number; ref: string; waLink: string | null; payState: string; due: number; amount: number; name: string; phone: string } | null>(null);
   const close = () => {
     if (done) onDone();
@@ -28,8 +30,10 @@ export function NewBookingSheet({ open, onClose, date, picks, onDone }: { open: 
   };
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const missing = participantProblem(who);
+    if (missing) return void run(async () => { throw new Error(missing); });
     const r = await run(
-      () => staff<{ id: number; ref: string; waLink: string | null; payState: string; due: number; amount: number }>('bookings', 'POST', { date, slots: picks.map((p) => ({ spaceId: p.spaceId, start: p.start })), name, phone, note: note || undefined, pay: pay === 'later' ? undefined : { method: pay, reference: reference || undefined } }),
+      () => staff<{ id: number; ref: string; waLink: string | null; payState: string; due: number; amount: number }>('bookings', 'POST', { date, slots: picks.map((p) => ({ spaceId: p.spaceId, start: p.start })), name, phone, note: note || undefined, pay: pay === 'later' ? undefined : { method: pay, reference: reference || undefined }, ...participantBody(who) }),
       pay === 'later' ? 'Booked — payment due' : pay === 'cash' || allowedTo('money') ? 'Booked and paid' : 'Booked — admin will check the UPI in the bank',
     );
     if (r) {
@@ -38,6 +42,7 @@ export function NewBookingSheet({ open, onClose, date, picks, onDone }: { open: 
       setPhone('');
       setNote('');
       setReference('');
+      setWho(EMPTY_PARTICIPANT);
     }
   };
   const total = picks.reduce((n, p) => n + p.price, 0);
@@ -81,6 +86,7 @@ export function NewBookingSheet({ open, onClose, date, picks, onDone }: { open: 
         </div>
         <Field label="Player name"><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} required maxLength={80} /></Field>
         <Field label="WhatsApp number"><input className={inputCls} value={phone} onChange={(e) => setPhone(e.target.value)} required inputMode="numeric" placeholder="10-digit mobile" /></Field>
+        <ParticipantFields value={who} onChange={setWho} staff />
         <Field label="Note (optional)"><input className={inputCls} value={note} onChange={(e) => setNote(e.target.value)} maxLength={300} /></Field>
         <div>
           <div className="text-sm font-medium text-soft mb-1.5">Payment <span className="text-xs text-muted font-normal">(Due = they pay later, at the venue or online)</span></div>

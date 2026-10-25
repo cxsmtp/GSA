@@ -282,6 +282,15 @@ const MIGRATIONS: string[] = [
   ALTER TABLE payments ADD COLUMN reconciled_by TEXT;
   UPDATE payments SET reconciled_at = verified_at, reconciled_by = verified_by WHERE status = 'verified';
   `,
+  // 4: health answers ('' = booked before the question existed) and under-18 guardian details.
+  `
+  ALTER TABLE bookings ADD COLUMN health_json TEXT NOT NULL DEFAULT '';
+  ALTER TABLE bookings ADD COLUMN is_minor INTEGER NOT NULL DEFAULT 0;
+  ALTER TABLE bookings ADD COLUMN guardian_name TEXT NOT NULL DEFAULT '';
+  ALTER TABLE bookings ADD COLUMN guardian_phone TEXT NOT NULL DEFAULT '';
+  ALTER TABLE bookings ADD COLUMN guardian_relation TEXT NOT NULL DEFAULT '';
+  ALTER TABLE bookings ADD COLUMN guardian_consent_at TEXT;
+  `,
 ];
 
 type Db = DatabaseSync;

@@ -2,6 +2,7 @@ import { createBooking } from '@/lib/server/bookings';
 import { get } from '@/lib/server/db';
 import { allowFields, handleRouteError, HttpError, json, readJsonBody, str } from '@/lib/server/http';
 import { startup } from '@/lib/server/publicView';
+import { parseParticipant } from '@/lib/server/participant';
 import { enforce, enforceIp } from '@/lib/server/rateLimit';
 import { isValidGstin } from '@/lib/shared/gst';
 import { isValidDate } from '@/lib/shared/time';
@@ -17,7 +18,7 @@ export async function POST(req: Request) {
     enforceIp(req, 'book', 12, 60 * 60_000, 'Too many bookings from this connection. Please call us to book.');
     enforce('global:book', 400, 60 * 60_000, 'Booking is very busy right now. Please try again in a few minutes.');
     const body = await readJsonBody(req);
-    allowFields(body, ['date', 'slots', 'name', 'phone', 'email', 'gstin', 'channel', 'website']);
+    allowFields(body, ['date', 'slots', 'name', 'phone', 'email', 'gstin', 'channel', 'website', 'health', 'minor', 'guardian']);
     // Honeypot: a hidden field people never fill; bots do.
     if (body.website) throw new HttpError(400, 'Could not book.');
     const date = body.date;
@@ -40,7 +41,7 @@ export async function POST(req: Request) {
     enforce(`book-phone:${phone}`, 6, 60 * 60_000, 'Too many bookings for this number. Please call us.');
     const open = get<{ n: number }>(`SELECT COUNT(*) AS n FROM bookings WHERE phone = ? AND status = 'held'`, phone)!.n;
     if (open >= 2) throw new HttpError(429, 'You already have bookings waiting for payment. Please finish or let them expire first.');
-    const b = createBooking({ date, slots, name, phone, email, gstin, source: 'online', status: 'held', channel, actor: 'player' });
+    const b = createBooking({ date, slots, name, phone, email, gstin, source: 'online', status: 'held', channel, actor: 'player', ...parseParticipant(body) });
     return json({ ok: true, token: b.token, ref: b.ref });
   } catch (err) {
     return handleRouteError(err, 'public/bookings');

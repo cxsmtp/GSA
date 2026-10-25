@@ -9,7 +9,7 @@ import { inputCls } from '@/components/ui/Field';
 import { BookingSheet } from './BookingSheet';
 import { Badge, Empty, Segmented, Spinner, useCan, useStaff } from './ui';
 
-type Row = { id: number; ref: string; date: string; name: string; phone: string; status: string; slots: string; amount: number; paid?: number; channel: string; source: string; payState: string; due: number; waSent: boolean };
+type Row = { id: number; ref: string; date: string; name: string; phone: string; status: string; slots: string; amount: number; paid?: number; channel: string; source: string; payState: string; due: number; waSent: boolean; minor: boolean; healthFlag: boolean };
 
 export function BookingsTab() {
   const allowedTo = useCan();
@@ -51,7 +51,7 @@ export function BookingsTab() {
                 <li key={b.id}>
                   <button onClick={() => setOpenId(b.id)} className="w-full rounded-2xl border border-line bg-panel/70 px-4 py-3 text-left hover:border-cyan">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="font-semibold truncate">{b.name}</span>
+                      <span className="font-semibold truncate">{b.name}{b.minor && <span className="ml-1.5 rounded bg-amber/20 px-1 text-[10px] font-bold text-amber">U18</span>}{b.healthFlag && <span className="ml-1 rounded bg-pink/20 px-1 text-[10px] font-bold text-pink" title="Health condition noted">⚕</span>}</span>
                       <Badge s={b.status} />
                     </div>
                     <div className="text-xs text-soft mt-0.5 truncate">{b.slots}</div>

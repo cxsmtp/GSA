@@ -5,10 +5,12 @@ import { addDays, isValidDate, parseHhmm, todayIst } from '@/lib/shared/time';
 import { BLOCK_KINDS, EXPENSE_CATEGORIES, INCOME_CATEGORIES, PAY_METHODS, type SlotRef } from '@/lib/shared/types';
 import { can, ROLES, type Permission } from '@/lib/shared/rbac';
 import { safeHttpsUrl } from '@/lib/shared/url';
+import { parseParticipant } from './participant';
+import { healthLabel } from '@/lib/shared/participant';
 import { normalizeIndianMobile } from '@/lib/shared/whatsapp';
 import { audit, recentAudit, verifyAudit } from './audit';
 import { endSessions, requireUser, userRow, type SessionUser } from './auth';
-import { bookingById, createBooking, setStatus, slotsLabel, slotsOf, sweepExpired, type BookingRow } from './bookings';
+import { bookingById, createBooking, healthOf, setStatus, slotsLabel, slotsOf, sweepExpired, type BookingRow } from './bookings';
 import { all, db, get, run, tx } from './db';
 import { csv } from './csv';
 import { gstReport, summary, thresholdWatch } from './finance';
@@ -140,6 +142,8 @@ function bookingListItem(b: BookingRow, admin: boolean) {
     id: b.id, ref: b.ref, date: b.date, name: b.name, phone: b.phone, status: b.status, source: b.source, channel: b.channel,
     slots: slotsLabel(slotsOf(b)), count: slotsOf(b).length, amount: b.amount_paise, createdAt: b.created_at,
     paid: admin ? paidTotal(b.id) : undefined, note: b.note, waSent: Boolean(b.wa_sent_at), waOpened: Boolean(b.wa_opened_at),
+    // Safety information the staff on court need: under 18, and any health condition.
+    minor: b.is_minor === 1, healthFlag: (healthOf(b)?.conditions.length ?? 0) > 0,
   };
 }
 
@@ -210,7 +214,8 @@ route('GET', 'bookings/:id', 'bookings.view', (c) => {
   const admin = can(c.user.role, 'money');
   const invoice = get<{ id: number; number: string; token: string; status: string }>('SELECT id, number, token, status FROM invoices WHERE booking_id = ? ORDER BY id DESC LIMIT 1', b.id);
   return {
-    booking: { ...bookingListItem(b, admin), email: b.email, gstin: b.gstin, token: b.token, cancelReason: b.cancel_reason, slotList: slotsOf(b), createdBy: b.created_by, holdExpiresAt: b.hold_expires_at, code: b.confirm_code },
+    booking: { ...bookingListItem(b, admin), email: b.email, gstin: b.gstin, token: b.token, health: healthOf(b) ? healthLabel(healthOf(b)) : null,
+      guardian: b.is_minor ? { name: b.guardian_name, phone: b.guardian_phone, relation: b.guardian_relation, consentAt: b.guardian_consent_at } : null, cancelReason: b.cancel_reason, slotList: slotsOf(b), createdBy: b.created_by, holdExpiresAt: b.hold_expires_at, code: b.confirm_code },
     payments: admin ? paymentsForBooking(b.id) : paymentsForBooking(b.id).map((p) => ({ id: p.id, method: p.method, status: p.status, direction: p.direction, created_at: p.created_at })),
     invoice: admin ? invoice ?? null : null,
     waLink: deskConfirmLink(b, appUrl(c.req)),
@@ -244,7 +249,7 @@ async function takeDeskPayment(user: SessionUser, b: BookingRow, methodRaw: unkn
 
 route('POST', 'bookings', 'bookings.create', async (c) => {
   const body = await c.body();
-  allowFields(body, ['date', 'slots', 'name', 'phone', 'email', 'gstin', 'note', 'pay']);
+  allowFields(body, ['date', 'slots', 'name', 'phone', 'email', 'gstin', 'note', 'pay', 'health', 'minor', 'guardian']);
   const date = body.date;
   if (!isValidDate(date)) throw new HttpError(400, 'Pick a date.');
   if (!Array.isArray(body.slots)) throw new HttpError(400, 'Pick slots.');
@@ -258,7 +263,7 @@ route('POST', 'bookings', 'bookings.create', async (c) => {
   if (gstin && !isValidGstin(gstin)) throw new HttpError(400, 'That GSTIN is not valid.');
   const b = createBooking({
     date, slots, name: str(body.name, 'Name', 80), phone, email: str(body.email, 'Email', 120, { required: false }), gstin,
-    note: str(body.note, 'Note', 300, { required: false }), source: 'desk', status: 'reserved', actor: c.user.username, staff: true,
+    note: str(body.note, 'Note', 300, { required: false }), source: 'desk', status: 'reserved', actor: c.user.username, staff: true, ...parseParticipant(body),
   });
   if (body.pay && typeof body.pay === 'object') {
     const p = body.pay as Record<string, unknown>;
@@ -757,8 +762,9 @@ route('GET', 'export/:kind', 'money', (c) => {
   const p = (n: number) => (n / 100).toFixed(2);
   let rows: (string | number)[][] = [];
   if (kind === 'bookings') {
-    rows = [['Ref', 'Date', 'Name', 'Phone', 'Status', 'Source', 'Channel', 'Slots', 'Amount', 'Created']];
-    for (const b of all<BookingRow>('SELECT * FROM bookings WHERE date BETWEEN ? AND ? ORDER BY date, id', from, to)) rows.push([b.ref, b.date, b.name, b.phone, b.status, b.source, b.channel, slotsLabel(slotsOf(b)), p(b.amount_paise), b.created_at]);
+    // Health answers are never exported; the under-18 flag and guardian contact are.
+    rows = [['Ref', 'Date', 'Name', 'Phone', 'Status', 'Source', 'Channel', 'Slots', 'Amount', 'Created', 'Under 18', 'Guardian', 'Guardian phone']];
+    for (const b of all<BookingRow>('SELECT * FROM bookings WHERE date BETWEEN ? AND ? ORDER BY date, id', from, to)) rows.push([b.ref, b.date, b.name, b.phone, b.status, b.source, b.channel, slotsLabel(slotsOf(b)), p(b.amount_paise), b.created_at, b.is_minor ? 'yes' : 'no', b.guardian_name, b.guardian_phone]);
   } else if (kind === 'payments') {
     rows = [['ID', 'Date', 'Direction', 'Status', 'Method', 'Category', 'Amount', 'Reference', 'Booking', 'Note', 'Verified by']];
     for (const r of all<PaymentRow & { ref: string | null }>('SELECT p.*, b.ref FROM payments p LEFT JOIN bookings b ON b.id = p.booking_id WHERE p.date BETWEEN ? AND ? ORDER BY p.id', from, to)) rows.push([r.id, r.date, r.direction, r.status, r.method, r.category, p(r.amount_paise), r.reference, r.ref || '', r.note, r.verified_by || '']);

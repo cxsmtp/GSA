@@ -10,6 +10,7 @@ import type { Cell, DayGrid, PublicConfig } from '@/lib/shared/types';
 import { WhatsAppIcon } from '@/components/ui/BrandIcons';
 import { Field, inputCls } from '@/components/ui/Field';
 import { Sheet } from '@/components/ui/Sheet';
+import { EMPTY_PARTICIPANT, ParticipantFields, participantBody, participantProblem, type ParticipantState } from '@/components/ui/ParticipantFields';
 
 type Sel = { spaceId: number; spaceName: string; start: number; end: number; price: number };
 
@@ -287,6 +288,7 @@ function DetailsSheet({
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [remember, setRemember] = useState(false);
+  const [who, setWho] = useState<ParticipantState>(EMPTY_PARTICIPANT);
   const hp = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -305,10 +307,12 @@ function DetailsSheet({
     setErr('');
     const digits = phone.replace(/\D/g, '').replace(/^(91|0)(?=\d{10}$)/, '');
     if (!/^[6-9]\d{9}$/.test(digits)) return setErr('Enter your 10-digit WhatsApp number.');
+    const missing = participantProblem(who);
+    if (missing) return setErr(missing);
     setBusy(true);
     try {
       const r = await api<{ token: string; ref: string }>('/api/public/bookings', {
-        body: { date, slots: sel.map((s) => ({ spaceId: s.spaceId, start: s.start })), name, phone: digits, email: email || undefined, gstin: gstOn && gstin ? gstin : undefined, channel: detectChannel(), website: hp.current?.value || undefined },
+        body: { date, slots: sel.map((s) => ({ spaceId: s.spaceId, start: s.start })), name, phone: digits, email: email || undefined, gstin: gstOn && gstin ? gstin : undefined, channel: detectChannel(), website: hp.current?.value || undefined, ...participantBody(who) },
       });
       // Only when the player asks: name and number, never email or GSTIN.
       try {
@@ -357,6 +361,7 @@ function DetailsSheet({
         <Field label="Email (optional)" htmlFor="bk-email">
           <input id="bk-email" type="email" className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)} maxLength={120} autoComplete="email" placeholder="you@example.com" />
         </Field>
+        <ParticipantFields value={who} onChange={setWho} />
         <label className="flex items-center gap-3 text-sm text-soft">
           <input type="checkbox" checked={gstOn} onChange={(e) => setGstOn(e.target.checked)} className="w-5 h-5 accent-lime" /> I need a GST invoice for my business
         </label>

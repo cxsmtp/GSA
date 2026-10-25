@@ -44,7 +44,8 @@ export interface BookingMessageFacts {
 }
 
 /** What the player sends the manager once booked and paid. */
-export function playerBookedMessage(f: BookingMessageFacts, paidBy: string): string {
+/** `extra`: the under-18 guardian and health lines, so the manager has them before play. */
+export function playerBookedMessage(f: BookingMessageFacts, paidBy: string, extra: string[] = []): string {
   return [
     `Hi! I'm booked ✅`,
     ``,
@@ -53,6 +54,7 @@ export function playerBookedMessage(f: BookingMessageFacts, paidBy: string): str
     `Date: ${f.dateLabel}`,
     `Where & when: ${f.slots}`,
     `Paid: ${f.amount}${paidBy ? ` (${paidBy})` : ''}`,
+    ...extra,
   ].join('\n');
 }
 

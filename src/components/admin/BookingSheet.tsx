@@ -12,7 +12,7 @@ import { Badge, Btn, Spinner, staff, useAction, useCan, useToast } from './ui';
 
 interface Detail {
   booking: {
-    id: number; ref: string; date: string; name: string; phone: string; status: string; source: string; channel: string; slots: string; amount: number; paid?: number; payState: string; due: number;
+    id: number; ref: string; date: string; name: string; phone: string; status: string; source: string; channel: string; slots: string; amount: number; paid?: number; payState: string; due: number; minor: boolean; healthFlag: boolean; health: string | null; guardian: { name: string; phone: string; relation: string; consentAt: string | null } | null;
     note: string; email: string; gstin: string; token: string; cancelReason: string; createdBy: string | null; createdAt: string; waSent: boolean; waOpened: boolean; code: string;
   };
   payments: { id: number; method: string; status: string; direction: string; amount_paise?: number; reference?: string; created_at: string; created_by?: string }[];
@@ -67,6 +67,20 @@ export function BookingSheet({ id, onClose, onChanged }: { id: number | null; on
             </div>
             <Badge s={b.status} />
           </div>
+          {(b.guardian || b.health) && (
+            <div className={`rounded-2xl border p-3 text-sm space-y-1.5 ${b.healthFlag || b.guardian ? 'border-amber/50 bg-amber/10' : 'border-line bg-night/60'}`}>
+              {b.guardian && (
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-wider text-amber">Under 18</div>
+                  <div>Guardian: <b>{b.guardian.name}</b> ({b.guardian.relation}) · <a href={`tel:+${b.guardian.phone}`} className="text-cyan">{prettyMobile(b.guardian.phone)}</a></div>
+                  {b.guardian.consentAt && <div className="text-[11px] text-muted">Consent given {fmtStamp(b.guardian.consentAt)}</div>}
+                </div>
+              )}
+              {b.health && (
+                <div><span className={`text-xs font-bold uppercase tracking-wider ${b.healthFlag ? 'text-amber' : 'text-muted'}`}>Health</span> <span className={b.healthFlag ? 'font-semibold' : 'text-soft'}>{b.health}</span></div>
+              )}
+            </div>
+          )}
           <div className="rounded-2xl bg-night/60 border border-line p-3 text-sm space-y-1">
             <div className="font-semibold">{fmtDate(b.date)}</div>
             <div className="text-soft">{b.slots}</div>

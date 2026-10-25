@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { payable } from '@/lib/shared/gst';
 import { fmtDate, fmtTime } from '@/lib/shared/time';
 import type { BookedSlot, BookingStatus, SlotRef } from '@/lib/shared/types';
+import type { Guardian, Health } from '@/lib/shared/participant';
 import { audit } from './audit';
 import { all, get, isUniqueViolation, run, tx } from './db';
 import { HttpError } from './http';
@@ -41,6 +42,12 @@ export interface BookingRow {
   wa_opened_at: string | null;
   wa_sent_at: string | null;
   note: string;
+  health_json: string;
+  is_minor: number;
+  guardian_name: string;
+  guardian_phone: string;
+  guardian_relation: string;
+  guardian_consent_at: string | null;
   cancel_reason: string;
   created_by: string | null;
   created_at: string;
@@ -74,6 +81,16 @@ export function slotsLabel(slots: BookedSlot[]): string {
     parts.push(`${space} · ${ranges.map(([a, b]) => `${fmtTime(a)}–${fmtTime(b)}`).join(', ')}`);
   }
   return parts.join('; ');
+}
+
+/** The stored health answer (null for bookings made before the question existed). */
+export function healthOf(b: Pick<BookingRow, 'health_json'>): Health | null {
+  if (!b.health_json) return null;
+  try {
+    return JSON.parse(b.health_json) as Health;
+  } catch {
+    return null;
+  }
 }
 
 export function bookingFacts(b: BookingRow) {
@@ -114,6 +131,10 @@ export interface NewBooking {
   actor: string;
   /** Desk bookings may take past slots of today (walk-ins already playing) and ignore the window. */
   staff?: boolean;
+  /** From parseParticipant: always given for new bookings. */
+  health: Health;
+  minor: boolean;
+  guardian: Guardian | null;
 }
 
 export function createBooking(input: NewBooking, now = Date.now()): BookingRow {
@@ -150,10 +171,12 @@ export function createBooking(input: NewBooking, now = Date.now()): BookingRow {
       ref = newRef();
       try {
         id = run(
-          `INSERT INTO bookings (ref, token, date, name, phone, email, gstin, status, source, channel, slots_json, base_paise, amount_paise, hold_expires_at, confirm_code, note, created_by, created_at, updated_at)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          `INSERT INTO bookings (ref, token, date, name, phone, email, gstin, status, source, channel, slots_json, base_paise, amount_paise, hold_expires_at, confirm_code, note, created_by, created_at, updated_at,
+             health_json, is_minor, guardian_name, guardian_phone, guardian_relation, guardian_consent_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
           ref, randomToken(16), input.date, input.name, input.phone, input.email || '', input.gstin || '', input.status, input.source, input.channel || (input.source === 'desk' ? 'desk' : 'web'),
           JSON.stringify(picked), base, amount, input.status === 'held' ? now + b.holdMinutes * 60_000 : null, code, input.note || '', input.actor, stamp, stamp,
+          JSON.stringify(input.health), input.minor ? 1 : 0, input.guardian?.name ?? '', input.guardian?.phone ?? '', input.guardian?.relation ?? '', input.minor ? stamp : null,
         ).lastId;
       } catch (err) {
         if (!isUniqueViolation(err)) throw err;
@@ -168,7 +191,8 @@ export function createBooking(input: NewBooking, now = Date.now()): BookingRow {
       if (isUniqueViolation(err)) throw new HttpError(409, 'One of your slots was just taken. Please pick again.', {}, { code: 'slot_taken' });
       throw err;
     }
-    audit(input.actor, 'booking.create', 'booking', ref, { date: input.date, slots: picked.length, amount, status: input.status, source: input.source });
+    // Health answers stay out of the audit log; only that a guardian consented is recorded.
+    audit(input.actor, 'booking.create', 'booking', ref, { date: input.date, slots: picked.length, amount, status: input.status, source: input.source, minor: input.minor, guardianConsent: input.minor });
     return bookingById(id)!;
   });
 }

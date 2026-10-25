@@ -1,6 +1,7 @@
 import { rupees } from '@/lib/shared/money';
-import { bookingConfirmedMessage, playerBookedMessage, waMeLink, type PayState } from '@/lib/shared/whatsapp';
-import { bookingFacts, type BookingRow } from './bookings';
+import { bookingConfirmedMessage, playerBookedMessage, prettyMobile, waMeLink, type PayState } from '@/lib/shared/whatsapp';
+import { healthLabel } from '@/lib/shared/participant';
+import { bookingFacts, healthOf, type BookingRow } from './bookings';
 import { get, run } from './db';
 import { getSettings } from './settings';
 
@@ -47,5 +48,14 @@ export function playerBookedLink(b: BookingRow): string | null {
   if (b.status !== 'confirmed') return null;
   const a = getSettings('business');
   const upi = get<{ reference: string; method: string }>("SELECT reference, method FROM payments WHERE booking_id = ? AND status = 'verified' AND direction = 'in' ORDER BY id DESC LIMIT 1", b.id);
-  return waMeLink(a.whatsapp, playerBookedMessage({ ...bookingFacts(b), amount: rupees(b.amount_paise), business: a.name }, upi ? `${upi.method.toUpperCase()}${upi.reference ? ` ref ${upi.reference}` : ''}` : ''));
+  return waMeLink(a.whatsapp, playerBookedMessage({ ...bookingFacts(b), amount: rupees(b.amount_paise), business: a.name }, upi ? `${upi.method.toUpperCase()}${upi.reference ? ` ref ${upi.reference}` : ''}` : '', participantLines(b)));
+}
+
+/** Under-18 guardian and health, as lines for the manager. */
+export function participantLines(b: BookingRow): string[] {
+  const lines: string[] = [];
+  if (b.is_minor) lines.push(`Under 18 — guardian: ${b.guardian_name} (${b.guardian_relation}), ${prettyMobile(b.guardian_phone)}`);
+  const h = healthOf(b);
+  if (h) lines.push(`Health: ${healthLabel(h)}`);
+  return lines;
 }

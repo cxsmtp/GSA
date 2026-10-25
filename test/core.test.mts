@@ -23,7 +23,7 @@ const { csv } = await import('../src/lib/server/csv.ts');
 const { _routes } = await import('../src/lib/server/staffApi.ts');
 
 const tomorrow = addDays(todayIst(), 1);
-const base = { date: tomorrow, name: 'Test Player', phone: '919829011111', source: 'online' as const, status: 'held' as const, actor: 'player' };
+const base = { date: tomorrow, name: 'Test Player', phone: '919829011111', source: 'online' as const, status: 'held' as const, actor: 'player', health: { conditions: [], note: '' }, minor: false, guardian: null };
 
 before(() => seedDefaults());
 
@@ -205,5 +205,40 @@ describe('cash custody', () => {
     decideDeposit(dep, 'confirmed', '', 'admin');
     assert.equal(balances('vikram')[0].onHand, 0);
     assert.throws(() => decideDeposit(dep, 'rejected', 'x', 'admin'), /already confirmed/);
+  });
+});
+
+describe('health and under-18 answers', () => {
+  test('health must be answered; "None" is a valid answer and cannot be mixed', async () => {
+    const { parseParticipant } = await import('../src/lib/server/participant.ts');
+    assert.throws(() => parseParticipant({ minor: false }), /health question/);
+    assert.deepEqual(parseParticipant({ health: { conditions: ['None'] }, minor: false }).health, { conditions: [], note: '' });
+    assert.throws(() => parseParticipant({ health: { conditions: ['None', 'Asthma / breathing'] }, minor: false }), /cannot be combined/);
+    assert.throws(() => parseParticipant({ health: { conditions: ['Other'] }, minor: false }), /describe/);
+    assert.throws(() => parseParticipant({ health: { conditions: ['Made up'] }, minor: false }), /Unknown/);
+    assert.deepEqual(parseParticipant({ health: { conditions: ['Asthma / breathing'], note: 'carries inhaler' }, minor: false }).health, { conditions: ['Asthma / breathing'], note: 'carries inhaler' });
+  });
+  test('under 18 needs guardian name, valid mobile, relationship and consent', async () => {
+    const { parseParticipant } = await import('../src/lib/server/participant.ts');
+    const h = { conditions: ['None'] };
+    assert.throws(() => parseParticipant({ health: h }), /under 18/);
+    assert.throws(() => parseParticipant({ health: h, minor: true }), /guardian details are required/);
+    const g = { name: 'Meena Rao', phone: '9414011111', relation: 'Mother', consent: true };
+    assert.throws(() => parseParticipant({ health: h, minor: true, guardian: { ...g, phone: '12345' } }), /mobile/);
+    assert.throws(() => parseParticipant({ health: h, minor: true, guardian: { ...g, relation: 'Friend' } }), /relationship/);
+    assert.throws(() => parseParticipant({ health: h, minor: true, guardian: { ...g, consent: false } }), /consent/);
+    assert.deepEqual(parseParticipant({ health: h, minor: true, guardian: g }).guardian, { name: 'Meena Rao', phone: '919414011111', relation: 'Mother' });
+  });
+  test('the answers are stored with the booking and reach the manager', async () => {
+    const { healthOf } = await import('../src/lib/server/bookings.ts');
+    const { playerBookedLink } = await import('../src/lib/server/whatsapp.ts');
+    const b = createBooking({ ...base, phone: '919829055555', name: 'Kid Player', slots: [{ spaceId: 2, start: 14 * 60 }], health: { conditions: ['Asthma / breathing'], note: 'inhaler' }, minor: true, guardian: { name: 'Meena Rao', phone: '919414011111', relation: 'Mother' } });
+    assert.deepEqual(healthOf(b), { conditions: ['Asthma / breathing'], note: 'inhaler' });
+    assert.equal(b.is_minor, 1);
+    assert.ok(b.guardian_consent_at);
+    await submitUtr(b, '412345678909');
+    const msg = decodeURIComponent(playerBookedLink(bookingById(b.id)!)!);
+    assert.match(msg, /Under 18 — guardian: Meena Rao \(Mother\), \+91 94140 11111/);
+    assert.match(msg, /Health: Asthma \/ breathing — inhaler/);
   });
 });

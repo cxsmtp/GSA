@@ -11,7 +11,7 @@ import { can } from '@/lib/shared/rbac';
 
 interface Dash {
   today: string;
-  bookings: { id: number; ref: string; name: string; status: string; slots: string; amount: number; paid?: number }[];
+  bookings: { id: number; ref: string; name: string; status: string; slots: string; amount: number; paid?: number; minor: boolean; healthFlag: boolean }[];
   occupancy: number;
   pendingPayments?: number;
   collectedToday?: number;
@@ -82,7 +82,7 @@ export function TodayTab({ go }: { go: (t: 'money' | 'bookings' | 'cash') => voi
               <li key={b.id}>
                 <button onClick={() => setOpenId(b.id)} className="w-full flex items-center gap-3 py-2.5 text-left">
                   <div className="min-w-0 flex-1">
-                    <div className="font-semibold truncate">{b.name} <span className="text-xs text-muted font-mono">{b.ref}</span></div>
+                    <div className="font-semibold truncate">{b.name}{b.minor && <span className="ml-1.5 rounded bg-amber/20 px-1 text-[10px] font-bold text-amber">U18</span>}{b.healthFlag && <span className="ml-1 rounded bg-pink/20 px-1 text-[10px] font-bold text-pink" title="Health condition noted">⚕</span>} <span className="text-xs text-muted font-mono">{b.ref}</span></div>
                     <div className="text-xs text-soft truncate">{b.slots}</div>
                   </div>
                   <Badge s={b.status} />
