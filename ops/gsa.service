@@ -1,0 +1,38 @@
+[Unit]
+Description=GSA web app
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=gsa
+Group=gsa
+WorkingDirectory=/opt/gsa/current/.next/standalone
+EnvironmentFile=/etc/gsa.env
+ExecStart=/usr/local/bin/node server.js
+Restart=always
+RestartSec=3
+# Hardening: the app may write only its data folder.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/gsa
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+SystemCallArchitectures=native
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

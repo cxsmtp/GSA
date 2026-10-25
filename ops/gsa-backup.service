@@ -1,0 +1,15 @@
+[Unit]
+Description=GSA nightly backup
+
+[Service]
+Type=oneshot
+User=gsa
+Group=gsa
+Environment=DATA_DIR=/var/lib/gsa BACKUP_DIR=/var/lib/gsa-backups
+ExecStart=/usr/local/sbin/gsa-backup
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/gsa-backups
+ReadWritePaths=/var/lib/gsa
+PrivateTmp=true
