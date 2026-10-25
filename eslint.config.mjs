@@ -2,7 +2,7 @@ import next from 'eslint-config-next';
 
 const config = [
   ...next,
-  { ignores: ['.next/**', 'node_modules/**', 'public/sw.js'] },
+  { ignores: ['.next/**', 'node_modules/**', 'public/sw.js', 'dist/**'] },
   {
     // Client components read browser-only facts (platform, saved bookings, the URL) after hydration and
     // load data in effects on purpose; the rule's alternative (external stores) adds code for no gain here.
