@@ -9,3 +9,4 @@ data/
 .env.production
 next-env.d.ts
 *.tsbuildinfo
+dist/

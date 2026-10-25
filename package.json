@@ -8,7 +8,8 @@
     "start": "NODE_OPTIONS=--disable-warning=ExperimentalWarning node .next/standalone/server.js",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "node --disable-warning=ExperimentalWarning --import tsx --test test/*.test.mts"
+    "test": "node --disable-warning=ExperimentalWarning --import tsx --test test/*.test.mts",
+    "package": "node scripts/package.mjs"
   },
   "engines": {
     "node": ">=22.13"
