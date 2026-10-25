@@ -1,7 +1,7 @@
 /**
  * WhatsApp without a paid API (the buh project's "Confirm on WhatsApp"): a wa.me link opens the
  * person's own WhatsApp with the message already typed; they only tap Send. Used both ways:
- * the player sends "Confirm my booking GSA-… · code 1234" to the academy (proving the number is
+ * the player sends "Confirm my booking GSA-… · code 1234" to the business (proving the number is
  * theirs), and the desk sends the confirmation to the player's number in one tap.
  * With the WhatsApp Cloud API configured, the server also sends the confirmation by itself.
  */
@@ -41,44 +41,43 @@ export interface BookingMessageFacts {
   dateLabel: string;
   slots: string;
   amount: string;
-  academy: string;
+  business: string;
   link?: string;
 }
 
-/** What the player sends to the academy. */
+/** What the player sends to the business. */
 export function playerConfirmMessage(ref: string, code: string): string {
-  return `Hi! Please confirm my court booking ${ref} · code ${code}`;
+  return `Hi! Please confirm my space booking ${ref} · code ${code}`;
 }
 
 /**
  * Where the money stands for a booking, as the player should read it:
  *   paid       verified in full
- *   verifying  paid (cash noted by the coach, or a UPI reference given) and being checked by the admin
+ *   verifying  paid (cash noted by the manager, or a UPI reference given) and being checked by the admin
  *   due        nothing received yet (phone bookings: pay at the venue or online with the link)
  */
 export type PayState = 'paid' | 'verifying' | 'due';
 
-/** What the academy sends to the player: confirmed or not, always with the payment position. */
-export function bookingConfirmedMessage(f: BookingMessageFacts & { payState?: PayState; due?: string }): string {
+/** What the business sends to the player: confirmed or not, always with the payment position. */
+export function bookingConfirmedMessage(f: BookingMessageFacts & { payState?: PayState; due?: string; note?: string }): string {
   const first = f.name.trim().split(/\s+/)[0] || '';
   const state = f.payState ?? 'paid';
   const payLine =
     state === 'paid' ? `Payment: ${f.amount} received ✓` : state === 'verifying' ? `Payment: ${f.amount} received, being verified` : `Payment due: ${f.due ?? f.amount} (pay at the venue, or online with the link below)`;
   return [
-    `🏸 Court booked${first ? `, ${first}` : ''}!`,
+    `✅ Booked${first ? `, ${first}` : ''}!`,
     ``,
-    `${f.academy}`,
+    `${f.business}`,
     `Ref: ${f.ref}`,
     `Date: ${f.dateLabel}`,
-    `Court & time: ${f.slots}`,
+    `Where & when: ${f.slots}`,
     `Total: ${f.amount}`,
     payLine,
     ...(f.link ? [``, `${state === 'due' ? 'Your booking & payment' : 'Your booking & receipt'}: ${f.link}`] : []),
-    ``,
-    `Please arrive 10 minutes early with non-marking shoes. See you on court!`,
+    ...(f.note ? [``, f.note] : []),
   ].join('\n');
 }
 
 export function paymentReceivedMessage(f: BookingMessageFacts): string {
-  return `We received your payment details for booking ${f.ref} (${f.dateLabel}, ${f.slots}). We'll confirm on WhatsApp as soon as it is verified. — ${f.academy}`;
+  return `We received your payment details for booking ${f.ref} (${f.dateLabel}, ${f.slots}). We'll confirm on WhatsApp as soon as it is verified. — ${f.business}`;
 }

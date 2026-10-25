@@ -7,8 +7,8 @@ import { dataFile } from './dataDir';
  *
  * Schema changes are new numbered entries at the end of MIGRATIONS; never edit one that has shipped.
  * Money is whole paise (integers). Dates are IST 'YYYY-MM-DD'; slot times are minutes since midnight.
- * Double booking is impossible by construction: booking_slots has UNIQUE(court_id, date, start_min),
- * and a slot row exists only while its booking holds the court.
+ * Double booking is impossible by construction: booking_slots has UNIQUE(space_id, date, start_min),
+ * and a slot row exists only while its booking holds the space.
  */
 
 const MIGRATIONS: string[] = [
@@ -25,7 +25,7 @@ const MIGRATIONS: string[] = [
     id INTEGER PRIMARY KEY,
     username TEXT NOT NULL UNIQUE COLLATE NOCASE,
     name TEXT NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('admin','coach')),
+    role TEXT NOT NULL CHECK (role IN ('admin','manager')),
     password_hash TEXT NOT NULL,
     must_change INTEGER NOT NULL DEFAULT 1,
     totp_secret TEXT,
@@ -46,7 +46,7 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX sessions_user ON sessions(user_id);
 
-  CREATE TABLE courts (
+  CREATE TABLE spaces (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL,
     note TEXT NOT NULL DEFAULT '',
@@ -57,7 +57,7 @@ const MIGRATIONS: string[] = [
   CREATE TABLE price_rules (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL,
-    court_id INTEGER REFERENCES courts(id),
+    space_id INTEGER REFERENCES spaces(id),
     days TEXT NOT NULL DEFAULT '0123456',
     start_min INTEGER NOT NULL,
     end_min INTEGER NOT NULL,
@@ -68,7 +68,7 @@ const MIGRATIONS: string[] = [
 
   CREATE TABLE blocks (
     id INTEGER PRIMARY KEY,
-    court_id INTEGER REFERENCES courts(id),
+    space_id INTEGER REFERENCES spaces(id),
     date_from TEXT NOT NULL,
     date_to TEXT NOT NULL,
     days TEXT NOT NULL DEFAULT '0123456',
@@ -113,12 +113,12 @@ const MIGRATIONS: string[] = [
   CREATE TABLE booking_slots (
     id INTEGER PRIMARY KEY,
     booking_id INTEGER NOT NULL REFERENCES bookings(id),
-    court_id INTEGER NOT NULL REFERENCES courts(id),
+    space_id INTEGER NOT NULL REFERENCES spaces(id),
     date TEXT NOT NULL,
     start_min INTEGER NOT NULL,
     end_min INTEGER NOT NULL,
     price_paise INTEGER NOT NULL,
-    UNIQUE (court_id, date, start_min)
+    UNIQUE (space_id, date, start_min)
   );
   CREATE INDEX booking_slots_date ON booking_slots(date);
   CREATE INDEX booking_slots_booking ON booking_slots(booking_id);
@@ -157,7 +157,7 @@ const MIGRATIONS: string[] = [
     direction TEXT NOT NULL DEFAULT 'in' CHECK (direction IN ('in','refund')),
     booking_id INTEGER REFERENCES bookings(id),
     invoice_id INTEGER REFERENCES invoices(id),
-    category TEXT NOT NULL DEFAULT 'court',
+    category TEXT NOT NULL DEFAULT 'space',
     method TEXT NOT NULL CHECK (method IN ('upi','razorpay','cash','card','bank','other')),
     amount_paise INTEGER NOT NULL CHECK (amount_paise > 0),
     reference TEXT NOT NULL DEFAULT '',
@@ -232,14 +232,14 @@ const MIGRATIONS: string[] = [
     mac TEXT NOT NULL
   );
   `,
-  // 2: roles become a permission system (junior coaches), and cash custody: who took the money and
-  // which head coach answers for it until it is deposited and the admin confirms.
+  // 2: roles become a permission system (assistants), and cash custody: who took the money and
+  // which manager answers for it until it is deposited and the admin confirms.
   `
   CREATE TABLE users_new (
     id INTEGER PRIMARY KEY,
     username TEXT NOT NULL UNIQUE COLLATE NOCASE,
     name TEXT NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('admin','coach','junior')),
+    role TEXT NOT NULL CHECK (role IN ('admin','manager','assistant')),
     password_hash TEXT NOT NULL,
     must_change INTEGER NOT NULL DEFAULT 1,
     totp_secret TEXT,

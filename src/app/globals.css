@@ -3,7 +3,7 @@
 @import '@fontsource-variable/inter';
 
 /*
- * "Night court": deep ink background, shuttlecock-neon lime for action, electric cyan and violet
+ * Dark theme: deep ink background, neon lime for action, electric cyan and violet
  * for energy. One accent (lime) means "tap me"; colours carry slot states consistently everywhere.
  */
 @theme {
@@ -59,7 +59,7 @@ body {
   filter: blur(10px);
 }
 
-.court-lines {
+.space-lines {
   background-image:
     linear-gradient(to right, color-mix(in oklab, var(--color-text) 6%, transparent) 1px, transparent 1px),
     linear-gradient(to bottom, color-mix(in oklab, var(--color-text) 6%, transparent) 1px, transparent 1px);
@@ -97,7 +97,6 @@ body {
 @keyframes pulse-ring { 0% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--color-lime) 55%, transparent); } 100% { box-shadow: 0 0 0 14px transparent; } }
 .pulse { animation: pulse-ring 1.6s ease-out infinite; }
 
-@keyframes shuttle { 0% { transform: translate(-10%, 10%) rotate(-20deg); } 50% { transform: translate(110%, -40%) rotate(25deg); } 100% { transform: translate(230%, 10%) rotate(70deg); } }
 
 :focus-visible { outline: 2px solid var(--color-cyan); outline-offset: 2px; }
 

@@ -59,7 +59,7 @@ table{width:100%;border-collapse:collapse;margin-top:6px}th,td{border-bottom:1px
 <div class="page"><div class="band"></div>${cancelled ? '<div class="stamp">CANCELLED</div>' : ''}
 <div class="top"><div><div class="brand">${esc(seller.name)}</div>${seller.legalName && seller.legalName !== seller.name ? `<div>${esc(seller.legalName)}</div>` : ''}
 <div class="muted">${esc([seller.address, seller.city, seller.pincode].filter(Boolean).join(', '))}</div>
-<div class="muted">${esc(seller.state)} (State code ${esc(seller.stateCode)})${seller.phone ? ` · ${esc(seller.phone)}` : ''}${seller.email ? ` · ${esc(seller.email)}` : ''}</div>
+<div class="muted">${seller.stateCode ? `${esc(seller.state)} (State code ${esc(seller.stateCode)})` : ''}${seller.phone ? ` · ${esc(seller.phone)}` : ''}${seller.email ? ` · ${esc(seller.email)}` : ''}</div>
 ${seller.gstin ? `<div><b>GSTIN:</b> ${esc(seller.gstin)}</div>` : ''}</div>
 <div style="text-align:right"><h1>${title}</h1>${regular ? '<div class="muted">Original for recipient</div>' : ''}<div><b>No.</b> ${esc(inv.number)}</div><div><b>Date:</b> ${esc(fmtDate(inv.date))}</div></div></div>
 <div class="grid"><div class="box"><div class="muted">Billed to</div><div><b>${esc(inv.customer_name)}</b></div>${inv.customer_address ? `<div>${esc(inv.customer_address)}</div>` : ''}${inv.customer_phone ? `<div>${esc(inv.customer_phone)}</div>` : ''}${inv.customer_gstin ? `<div><b>GSTIN:</b> ${esc(inv.customer_gstin)}</div>` : ''}</div>

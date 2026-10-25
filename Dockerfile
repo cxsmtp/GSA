@@ -1,4 +1,4 @@
-# GSA badminton portal — production image (Hostinger VPS with Docker).
+# Production image (VPS with Docker).
 # Node 22 LTS: its built-in SQLite means no native modules to compile.
 FROM node:22-alpine AS base
 

@@ -17,14 +17,12 @@ export function WhatsAppIcon({ className = 'w-5 h-5' }: { className?: string }) 
   );
 }
 
-export function Shuttle({ className = 'w-6 h-6' }: { className?: string }) {
+/** The app's own mark: an abstract ring and dot. */
+export function LogoMark({ className = 'w-6 h-6' }: { className?: string }) {
   return (
     <svg viewBox="0 0 32 32" className={className} aria-hidden="true">
-      <g transform="rotate(-30 16 16)">
-        <path d="M10 3h12l-3 15h-6z" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-        <path d="M13 3l1.3 15M19 3l-1.3 15M11 9h10M11.8 14h8.4" stroke="currentColor" strokeWidth="1.1" opacity=".7" />
-        <ellipse cx="16" cy="22" rx="4.6" ry="3.8" fill="var(--color-lime)" />
-      </g>
+      <circle cx="16" cy="16" r="10" fill="none" stroke="currentColor" strokeWidth="2.4" />
+      <circle cx="21" cy="11" r="4.2" fill="var(--color-lime)" />
     </svg>
   );
 }

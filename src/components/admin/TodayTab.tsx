@@ -54,7 +54,7 @@ export function TodayTab({ go }: { go: (t: 'money' | 'bookings' | 'cash') => voi
         ) : data.cashOnName !== undefined ? (
           <button onClick={() => go('cash')} className="text-left"><Stat label="Cash on your name" value={rupees(data.cashOnName)} tone="text-amber" sub="tap to deposit" /></button>
         ) : (
-          <button onClick={() => go('cash')} className="text-left"><Stat label="Cash you took today" value={rupees(data.cashTakenToday ?? 0)} tone="text-amber" sub="hand it to your head coach" /></button>
+          <button onClick={() => go('cash')} className="text-left"><Stat label="Cash you took today" value={rupees(data.cashTakenToday ?? 0)} tone="text-amber" sub="hand it to your manager" /></button>
         )}
       </div>
 
@@ -76,7 +76,7 @@ export function TodayTab({ go }: { go: (t: 'money' | 'bookings' | 'cash') => voi
         <p className="text-[11px] text-muted">WhatsApp confirmations are sent with one tap from each booking (free). Automatic sending can be switched on in Settings.</p>
       )}
 
-      <Card title="On court today" action={<button onClick={() => go('bookings')} className="text-xs text-cyan font-semibold">All bookings</button>}>
+      <Card title="Today's bookings" action={<button onClick={() => go('bookings')} className="text-xs text-cyan font-semibold">All bookings</button>}>
         {data.bookings.length === 0 ? (
           <p className="text-sm text-muted">No bookings yet today.</p>
         ) : (

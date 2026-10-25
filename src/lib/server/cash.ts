@@ -7,8 +7,8 @@ import type { SessionUser } from './auth';
 
 /**
  * Cash custody. Every cash payment records who physically took it (collected_by) and who answers for
- * it (custodian): a head coach (or admin) holds cash on their own name; a junior coach's cash goes on
- * the name of the head coach they report to. The custodian deposits it (bank, or handed to the admin)
+ * it (custodian): a manager (or admin) holds cash on their own name; a assistant's cash goes on
+ * the name of the manager they report to. The custodian deposits it (bank, or handed to the admin)
  * and the admin confirms. "Cash on name" = cash collected − cash refunds paid out − confirmed deposits.
  */
 
@@ -29,11 +29,11 @@ export function custodianFor(user: Pick<SessionUser, 'id' | 'username' | 'role'>
     const lead = get<StaffRow>('SELECT * FROM users WHERE id = ? AND active = 1', me.reports_to);
     if (lead && can(lead.role, 'cash.custody')) return lead.username;
   }
-  // No head coach set for this junior: the first active head coach, else the first admin.
+  // No manager set for this assistant: the first active manager, else the first admin.
   const fallback =
-    get<StaffRow>("SELECT * FROM users WHERE role = 'coach' AND active = 1 ORDER BY id LIMIT 1") ??
+    get<StaffRow>("SELECT * FROM users WHERE role = 'manager' AND active = 1 ORDER BY id LIMIT 1") ??
     get<StaffRow>("SELECT * FROM users WHERE role = 'admin' AND active = 1 ORDER BY id LIMIT 1");
-  if (!fallback) throw new HttpError(409, 'No head coach or admin is active to hold this cash.');
+  if (!fallback) throw new HttpError(409, 'No manager or admin is active to hold this cash.');
   return fallback.username;
 }
 

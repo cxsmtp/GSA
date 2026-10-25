@@ -4,7 +4,7 @@ import { Banknote, CalendarDays, ClipboardList, Info, KeyRound, LayoutDashboard,
 import { can, ROLE_LABEL, type Permission } from '@/lib/shared/rbac';
 import { useCallback, useEffect, useState } from 'react';
 import { api } from '@/lib/client/api';
-import { Shuttle } from '@/components/ui/BrandIcons';
+import { LogoMark } from '@/components/ui/BrandIcons';
 import { Field, inputCls } from '@/components/ui/Field';
 import { Sheet } from '@/components/ui/Sheet';
 import { AboutTab } from './AboutTab';
@@ -24,9 +24,9 @@ const TABS: { key: Tab; label: string; icon: typeof LayoutDashboard; perm: Permi
   { key: 'today', label: 'Today', icon: LayoutDashboard, perm: 'bookings.view' },
   { key: 'bookings', label: 'Bookings', icon: ClipboardList, perm: 'bookings.view' },
   { key: 'money', label: 'Money', icon: PiggyBank, perm: 'money' },
-  // The admin sees cash inside Money; coaches get it as their own section.
+  // The admin sees cash inside Money; managers get it as their own section.
   { key: 'cash', label: 'Cash', icon: Banknote, perm: 'cash.collect', hideWith: 'money' },
-  { key: 'schedule', label: 'Courts', icon: CalendarDays, perm: 'schedule.manage' },
+  { key: 'schedule', label: 'Spaces', icon: CalendarDays, perm: 'schedule.manage' },
   { key: 'about', label: 'About page', icon: Info, perm: 'about.manage' },
   { key: 'settings', label: 'Settings', icon: Settings, perm: 'settings' },
   { key: 'account', label: 'My account', icon: KeyRound, perm: 'account' },
@@ -82,10 +82,10 @@ function Login({ onDone }: { onDone: () => void }) {
     <main className="min-h-dvh grid place-items-center px-4">
       <form onSubmit={submit} className="w-full max-w-sm rise space-y-4 rounded-3xl border border-line bg-panel/80 p-6 shadow-2xl">
         <div className="flex items-center gap-3">
-          <span className="grid place-items-center w-11 h-11 rounded-2xl bg-gradient-to-br from-violet to-cyan"><Shuttle className="w-7 h-7 text-ink" /></span>
+          <span className="grid place-items-center w-11 h-11 rounded-2xl bg-gradient-to-br from-violet to-cyan"><LogoMark className="w-7 h-7 text-ink" /></span>
           <div>
             <h1 className="font-display font-bold">Staff sign-in</h1>
-            <p className="text-xs text-muted">Admin & coach</p>
+            <p className="text-xs text-muted">Admin & manager</p>
           </div>
         </div>
         <Field label="Username" htmlFor="u"><input id="u" className={inputCls} value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="username" autoCapitalize="none" required /></Field>
@@ -144,7 +144,7 @@ function Shell({ onSignOut }: { onSignOut: () => void }) {
     <div className="min-h-dvh lg:flex">
       <aside className="hidden lg:flex lg:flex-col w-60 shrink-0 border-r border-line bg-night/60 p-4 gap-1 sticky top-0 h-dvh">
         <div className="flex items-center gap-2 px-2 pb-5">
-          <span className="grid place-items-center w-9 h-9 rounded-xl bg-gradient-to-br from-violet to-cyan"><Shuttle className="w-6 h-6 text-ink" /></span>
+          <span className="grid place-items-center w-9 h-9 rounded-xl bg-gradient-to-br from-violet to-cyan"><LogoMark className="w-6 h-6 text-ink" /></span>
           <div className="min-w-0"><div className="font-display text-sm font-bold">GSA Desk</div><div className="text-[11px] text-muted truncate">{me.name} · {ROLE_LABEL[me.role]}</div></div>
         </div>
         {tabs.map((t) => (
@@ -153,11 +153,12 @@ function Shell({ onSignOut }: { onSignOut: () => void }) {
           </button>
         ))}
         <button onClick={signOut} className="mt-auto flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-muted hover:text-bad"><LogOut className="w-4 h-4" /> Sign out</button>
+        <div className="px-3 text-[10px] text-muted">v{process.env.NEXT_PUBLIC_APP_VERSION}</div>
       </aside>
 
       <div className="flex-1 min-w-0">
         <header className="lg:hidden sticky top-0 z-30 glass border-x-0 border-t-0 flex items-center gap-2 px-4 h-14">
-          <span className="grid place-items-center w-8 h-8 rounded-lg bg-gradient-to-br from-violet to-cyan"><Shuttle className="w-5 h-5 text-ink" /></span>
+          <span className="grid place-items-center w-8 h-8 rounded-lg bg-gradient-to-br from-violet to-cyan"><LogoMark className="w-5 h-5 text-ink" /></span>
           <span className="font-display text-sm font-bold">{TABS.find((t) => t.key === tab)?.label}</span>
           <span className="ml-auto text-[11px] text-muted">{me.name} · {ROLE_LABEL[me.role]}</span>
         </header>
@@ -191,6 +192,7 @@ function Shell({ onSignOut }: { onSignOut: () => void }) {
             </button>
           ))}
           <button onClick={signOut} className="w-full flex items-center gap-3 rounded-2xl px-4 py-3.5 text-left font-semibold text-bad hover:bg-bad/10"><LogOut className="w-5 h-5" /> Sign out</button>
+          <p className="pt-2 text-center text-[11px] text-muted">Version {process.env.NEXT_PUBLIC_APP_VERSION}</p>
         </div>
       </Sheet>
     </div>

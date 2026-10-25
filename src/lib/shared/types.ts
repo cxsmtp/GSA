@@ -2,19 +2,19 @@ export type { Role } from './rbac';
 export type BookingStatus = 'held' | 'reserved' | 'submitted' | 'confirmed' | 'cancelled' | 'expired';
 export type PayMethod = 'upi' | 'razorpay' | 'cash' | 'card' | 'bank' | 'other';
 export const PAY_METHODS: readonly PayMethod[] = ['upi', 'razorpay', 'cash', 'card', 'bank', 'other'];
-export const INCOME_CATEGORIES = ['court', 'coaching', 'membership', 'tournament', 'shop', 'sponsorship', 'other'] as const;
-export const EXPENSE_CATEGORIES = ['Rent', 'Electricity', 'Salaries', 'Coach fees', 'Shuttles & equipment', 'Maintenance', 'Cleaning', 'Marketing', 'Water', 'Internet & phone', 'Software', 'Taxes & fees', 'Other'] as const;
-export const BLOCK_KINDS = ['coaching', 'maintenance', 'event', 'other'] as const;
+export const INCOME_CATEGORIES = ['space', 'training', 'membership', 'tournament', 'shop', 'sponsorship', 'other'] as const;
+export const EXPENSE_CATEGORIES = ['Rent', 'Electricity', 'Salaries', 'Staff fees', 'Equipment', 'Maintenance', 'Cleaning', 'Marketing', 'Water', 'Internet & phone', 'Software', 'Taxes & fees', 'Other'] as const;
+export const BLOCK_KINDS = ['training', 'maintenance', 'event', 'other'] as const;
 export type BlockKind = (typeof BLOCK_KINDS)[number];
 
 export interface SlotRef {
-  courtId: number;
+  spaceId: number;
   start: number;
 }
 
 export interface BookedSlot {
-  courtId: number;
-  courtName: string;
+  spaceId: number;
+  spaceName: string;
   start: number;
   end: number;
   price: number;
@@ -33,7 +33,7 @@ export interface Cell {
   kind?: string;
 }
 
-export interface CourtDay {
+export interface SpaceDay {
   id: number;
   name: string;
   note: string;
@@ -44,11 +44,11 @@ export interface DayGrid {
   date: string;
   open: boolean;
   slotMinutes: number;
-  courts: CourtDay[];
+  spaces: SpaceDay[];
 }
 
 export interface PublicConfig {
-  academy: { name: string; tagline: string; city: string; phone: string; whatsapp: string; address: string; mapUrl: string; email: string; instagram: string };
+  business: { name: string; tagline: string; city: string; phone: string; whatsapp: string; address: string; mapUrl: string; email: string; instagram: string };
   booking: { daysAhead: number; maxSlots: number; holdMinutes: number; slotMinutes: number };
   gst: { mode: 'none' | 'regular' | 'composition'; ratePct: number; pricesIncludeGst: boolean };
   pay: { upi: boolean; razorpay: boolean };

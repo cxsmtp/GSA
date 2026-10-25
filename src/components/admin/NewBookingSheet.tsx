@@ -29,7 +29,7 @@ export function NewBookingSheet({ open, onClose, date, picks, onDone }: { open: 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const r = await run(
-      () => staff<{ id: number; ref: string; waLink: string | null; payState: string; due: number; amount: number }>('bookings', 'POST', { date, slots: picks.map((p) => ({ courtId: p.courtId, start: p.start })), name, phone, note: note || undefined, pay: pay === 'later' ? undefined : { method: pay, reference: reference || undefined } }),
+      () => staff<{ id: number; ref: string; waLink: string | null; payState: string; due: number; amount: number }>('bookings', 'POST', { date, slots: picks.map((p) => ({ spaceId: p.spaceId, start: p.start })), name, phone, note: note || undefined, pay: pay === 'later' ? undefined : { method: pay, reference: reference || undefined } }),
       pay === 'later' ? 'Booked — payment due' : pay === 'cash' || allowedTo('money') ? 'Booked and paid' : 'Booked — admin will check the UPI in the bank',
     );
     if (r) {
@@ -76,7 +76,7 @@ export function NewBookingSheet({ open, onClose, date, picks, onDone }: { open: 
       <form onSubmit={submit} className="space-y-3">
         <div className="rounded-2xl bg-night/60 border border-line p-3 text-sm">
           <div className="text-muted text-xs">{fmtDate(date)}</div>
-          {picks.map((p) => <div key={`${p.courtId}${p.start}`}>{p.courtName} · {fmtTime(p.start)}–{fmtTime(p.end)}</div>)}
+          {picks.map((p) => <div key={`${p.spaceId}${p.start}`}>{p.spaceName} · {fmtTime(p.start)}–{fmtTime(p.end)}</div>)}
           <div className="mt-1 font-bold">{rupees(total)} <span className="text-xs text-muted font-normal">(before GST if prices exclude GST)</span></div>
         </div>
         <Field label="Player name"><input className={inputCls} value={name} onChange={(e) => setName(e.target.value)} required maxLength={80} /></Field>
@@ -91,7 +91,7 @@ export function NewBookingSheet({ open, onClose, date, picks, onDone }: { open: 
           </div>
         </div>
         {(pay === 'upi' || pay === 'card') && <Field label="Reference (UTR / last 4)"><input className={inputCls} value={reference} onChange={(e) => setReference(e.target.value)} maxLength={40} /></Field>}
-        {pay === 'cash' && !allowedTo('money') && <p className="text-xs text-muted">Cash is recorded as taken by you and goes on {allowedTo('cash.custody') ? 'your name' : 'your head coach’s name'} until it is deposited.</p>}
+        {pay === 'cash' && !allowedTo('money') && <p className="text-xs text-muted">Cash is recorded as taken by you and goes on {allowedTo('cash.custody') ? 'your name' : 'your manager’s name'} until it is deposited.</p>}
         {pay === 'upi' && !allowedTo('money') && <p className="text-xs text-muted">UPI paid at the desk: the admin checks it reached the bank.</p>}
         <Btn tone="lime" busy={busy} className="w-full py-3.5">Book {picks.length} slot{picks.length > 1 ? 's' : ''}</Btn>
       </form>

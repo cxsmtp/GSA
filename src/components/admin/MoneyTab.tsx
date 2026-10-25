@@ -181,7 +181,7 @@ function Overview() {
           {!data!.threshold.registered && (
             <Card title={`GST registration watch · FY ${data!.threshold.fy}`}>
               <div className="h-3 rounded-full bg-night"><div className={`h-3 rounded-full ${data!.threshold.pct >= 90 ? 'bg-bad' : data!.threshold.pct >= 70 ? 'bg-amber' : 'bg-ok'}`} style={{ width: `${Math.min(100, data!.threshold.pct)}%` }} /></div>
-              <p className="text-xs text-soft mt-2">{rupees(data!.threshold.turnover)} of {rupees(data!.threshold.threshold)} ({data!.threshold.pct}%). Services in Rajasthan must register for GST above ₹20 lakh a year.</p>
+              <p className="text-xs text-soft mt-2">{rupees(data!.threshold.turnover)} of {rupees(data!.threshold.threshold)} ({data!.threshold.pct}%). Registration is required above the threshold set in Settings → GST.</p>
             </Card>
           )}
         </>
@@ -205,7 +205,7 @@ function BillBook() {
         <div className="flex-1">{picker}</div>
         <Btn tone="lime" onClick={() => setOpen(true)}><Plus className="w-4 h-4" /> New</Btn>
       </div>
-      <p className="text-xs text-muted">Booking invoices are issued automatically when a booking is confirmed. Use New for coaching fees, memberships, tournaments, equipment.</p>
+      <p className="text-xs text-muted">Booking invoices are issued automatically when a booking is confirmed. Use New for training fees, memberships, tournaments, equipment.</p>
       {loading && !data ? <Spinner /> : !data?.invoices.length ? <Empty>No invoices in this period.</Empty> : (
         <ul className="space-y-1.5">
           {data.invoices.map((i) => (
@@ -237,9 +237,9 @@ function NewInvoice({ open, onClose, onDone }: { open: boolean; onClose: () => v
   const [gstin, setGstin] = useState('');
   const [address, setAddress] = useState('');
   const [pos, setPos] = useState('08');
-  const [lines, setLines] = useState([{ description: 'Badminton coaching — monthly fee', amount: '', qty: '1' }]);
+  const [lines, setLines] = useState([{ description: '', amount: '', qty: '1' }]);
   const [paid, setPaid] = useState('upi');
-  const [category, setCategory] = useState('coaching');
+  const [category, setCategory] = useState('training');
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     const r = await run(() => staff<{ token: string; number: string }>('invoices', 'POST', {
@@ -323,7 +323,7 @@ function Expenses() {
 
 function ExpenseForm({ open, onClose, onDone }: { open: boolean; onClose: () => void; onDone: () => void }) {
   const { busy, run } = useAction();
-  const [f, setF] = useState({ date: todayIst(), category: 'Shuttles & equipment', vendor: '', description: '', amount: '', gst: '', method: 'upi', reference: '' });
+  const [f, setF] = useState({ date: todayIst(), category: 'Equipment', vendor: '', description: '', amount: '', gst: '', method: 'upi', reference: '' });
   const [bill, setBill] = useState<string | null>(null);
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
   const submit = async (e: React.FormEvent) => {
@@ -366,11 +366,11 @@ function Income() {
   const { from, to, picker } = useRange(30);
   const { data, loading, reload } = useStaff<{ payments: Pay[] }>(`payments?from=${from}&to=${to}`);
   const { busy, run } = useAction();
-  const [f, setF] = useState({ category: 'coaching', method: 'upi', amount: '', reference: '', note: '', date: todayIst() });
+  const [f, setF] = useState({ category: 'training', method: 'upi', amount: '', reference: '', note: '', date: todayIst() });
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
   return (
     <div className="space-y-4">
-      <Card title="Record other income (coaching fees, membership, sponsorship…)">
+      <Card title="Record other income (training fees, membership, sponsorship…)">
         <form className="grid grid-cols-2 sm:grid-cols-3 gap-2" onSubmit={async (e) => { e.preventDefault(); if (await run(() => staff('payments', 'POST', f), 'Income recorded')) { setF({ ...f, amount: '', reference: '', note: '' }); void reload(); } }}>
           <select className={inputCls} value={f.category} onChange={set('category')} aria-label="Type">{INCOME_CATEGORIES.map((c) => <option key={c}>{c}</option>)}</select>
           <select className={inputCls} value={f.method} onChange={set('method')} aria-label="Method">{['upi', 'cash', 'bank', 'card', 'other'].map((m) => <option key={m}>{m}</option>)}</select>

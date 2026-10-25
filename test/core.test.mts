@@ -62,27 +62,27 @@ describe('GST & money', () => {
 
 describe('bookings', () => {
   test('server prices the slots and nobody can double book', () => {
-    const b = createBooking({ ...base, slots: [{ courtId: 1, start: 18 * 60 }] });
+    const b = createBooking({ ...base, slots: [{ spaceId: 1, start: 18 * 60 }] });
     assert.equal(b.status, 'held');
     assert.ok(b.amount_paise > 0);
-    assert.throws(() => createBooking({ ...base, phone: '919829022222', slots: [{ courtId: 1, start: 18 * 60 }] }), /just taken/);
+    assert.throws(() => createBooking({ ...base, phone: '919829022222', slots: [{ spaceId: 1, start: 18 * 60 }] }), /just taken/);
   });
-  test('an expired hold frees the court', () => {
+  test('an expired hold frees the space', () => {
     const now = Date.now();
-    const b = createBooking({ ...base, slots: [{ courtId: 2, start: 7 * 60 }] }, now);
+    const b = createBooking({ ...base, slots: [{ spaceId: 2, start: 7 * 60 }] }, now);
     sweepExpired(now + 60 * 60_000);
     assert.equal(bookingById(b.id)!.status, 'expired');
-    const again = createBooking({ ...base, slots: [{ courtId: 2, start: 7 * 60 }] }, now + 61 * 60_000);
+    const again = createBooking({ ...base, slots: [{ spaceId: 2, start: 7 * 60 }] }, now + 61 * 60_000);
     assert.equal(again.status, 'held');
   });
   test('a slot outside opening hours is refused', () => {
-    assert.throws(() => createBooking({ ...base, slots: [{ courtId: 1, start: 2 * 60 }] }), /does not exist/);
+    assert.throws(() => createBooking({ ...base, slots: [{ spaceId: 1, start: 2 * 60 }] }), /does not exist/);
   });
   test('UPI reference → verify → confirmed with one invoice; a UTR works once', async () => {
-    const b = createBooking({ ...base, slots: [{ courtId: 1, start: 9 * 60 }] });
+    const b = createBooking({ ...base, slots: [{ spaceId: 1, start: 9 * 60 }] });
     const p = submitUtr(b, '412345678901');
     assert.equal(bookingById(b.id)!.status, 'submitted');
-    const other = createBooking({ ...base, phone: '919829033333', slots: [{ courtId: 1, start: 10 * 60 }] });
+    const other = createBooking({ ...base, phone: '919829033333', slots: [{ spaceId: 1, start: 10 * 60 }] });
     assert.throws(() => submitUtr(other, '412345678901'), /already used/);
     await verifyPayment(p.id, 'admin');
     await verifyPayment(p.id, 'admin');
@@ -90,9 +90,10 @@ describe('bookings', () => {
     assert.equal(all('SELECT * FROM invoices WHERE booking_id = ?', b.id).length, 1);
   });
   test('invoice numbers run on without gaps', () => {
-    saveSettings('gst', { ...getSettings('gst'), mode: 'regular', gstin: '08AAPFU0939F1ZV' }, 'test');
-    const a = issueInvoice({ customerName: 'A', items: [{ description: 'Coaching', sac: '999293', qty: 1, amount: 118000 }], actor: 't' });
-    const b = issueInvoice({ customerName: 'B', items: [{ description: 'Coaching', sac: '999293', qty: 1, amount: 118000 }], actor: 't' });
+    saveSettings('business', { ...getSettings('business'), stateCode: '08', state: 'State 08' }, 'test');
+    saveSettings('gst', { ...getSettings('gst'), mode: 'regular', gstin: '08AAPFU0939F1ZV', sac: '999999' }, 'test');
+    const a = issueInvoice({ customerName: 'A', items: [{ description: 'Training', sac: '999293', qty: 1, amount: 118000 }], actor: 't' });
+    const b = issueInvoice({ customerName: 'B', items: [{ description: 'Training', sac: '999293', qty: 1, amount: 118000 }], actor: 't' });
     assert.equal(b.seq, a.seq + 1);
     assert.equal(a.kind, 'tax_invoice');
     assert.equal(a.cgst_paise + a.sgst_paise, 18000);
@@ -112,14 +113,14 @@ describe('security', () => {
     for (const r of _routes()) {
       assert.ok(r.perm in PERMISSIONS, `${r.method} ${r.path}`);
       if (/^(payments|invoices|expenses|finance|export|settings|users|audit|backup|media|rules)/.test(r.path) || /^cash\/deposits\/:id/.test(r.path)) {
-        assert.ok(!can('coach', r.perm) && !can('junior', r.perm), `${r.method} ${r.path} must be admin-only`);
+        assert.ok(!can('manager', r.perm) && !can('assistant', r.perm), `${r.method} ${r.path} must be admin-only`);
       }
     }
   });
-  test('a junior coach helps with reservations and changes nothing else', async () => {
+  test('a assistant helps with reservations and changes nothing else', async () => {
     const { can } = await import('../src/lib/shared/rbac.ts');
-    for (const p of ['bookings.view', 'bookings.create', 'bookings.notify', 'cash.collect'] as const) assert.ok(can('junior', p), p);
-    for (const p of ['bookings.edit', 'bookings.cancel', 'schedule.manage', 'about.manage', 'cash.custody', 'money', 'settings', 'team'] as const) assert.ok(!can('junior', p), p);
+    for (const p of ['bookings.view', 'bookings.create', 'bookings.notify', 'cash.collect'] as const) assert.ok(can('assistant', p), p);
+    for (const p of ['bookings.edit', 'bookings.cancel', 'schedule.manage', 'about.manage', 'cash.custody', 'money', 'settings', 'team'] as const) assert.ok(!can('assistant', p), p);
   });
   test('Razorpay signatures', async () => {
     process.env.RAZORPAY_KEY_SECRET = 'secret';
@@ -143,17 +144,17 @@ describe('security', () => {
   });
 });
 
-describe('phone bookings by the coach', () => {
+describe('phone bookings by the manager', () => {
   test('WhatsApp confirmation states due → being verified → paid', async () => {
     const { payStateOf, deskConfirmLink } = await import('../src/lib/server/whatsapp.ts');
     const { recordPayment } = await import('../src/lib/server/payments.ts');
-    const b = createBooking({ ...base, phone: '919876500000', name: 'Phone Caller', slots: [{ courtId: 2, start: 12 * 60 }], source: 'desk', status: 'reserved', actor: 'coach1', staff: true });
+    const b = createBooking({ ...base, phone: '919876500000', name: 'Phone Caller', slots: [{ spaceId: 2, start: 12 * 60 }], source: 'desk', status: 'reserved', actor: 'staff1', staff: true });
     assert.equal(payStateOf(b).payState, 'due');
     const due = decodeURIComponent(deskConfirmLink(b, 'https://x.in')!);
     assert.match(due, /^https:\/\/wa\.me\/919876500000\?text=/);
     assert.match(due, /Payment due: ₹/);
     assert.match(due, /https:\/\/x\.in\/pay\//);
-    const p = recordPayment({ bookingId: b.id, direction: 'in', category: 'court', method: 'cash', amount: b.amount_paise, reference: '', date: b.date, note: '', verified: false, actor: 'coach1' });
+    const p = recordPayment({ bookingId: b.id, direction: 'in', category: 'space', method: 'cash', amount: b.amount_paise, reference: '', date: b.date, note: '', verified: false, actor: 'staff1' });
     assert.equal(payStateOf(b).payState, 'verifying');
     assert.match(decodeURIComponent(deskConfirmLink(b)!), /received, being verified/);
     await verifyPayment(p.id, 'admin');
@@ -163,20 +164,20 @@ describe('phone bookings by the coach', () => {
 });
 
 describe('cash custody', () => {
-  test("a junior's cash goes on the head coach's name until a confirmed deposit", async () => {
+  test("a assistant's cash goes on the manager's name until a confirmed deposit", async () => {
     const { run: exec } = await import('../src/lib/server/db.ts');
     const { custodianFor, balances, createDeposit, decideDeposit } = await import('../src/lib/server/cash.ts');
     const { recordPayment } = await import('../src/lib/server/payments.ts');
     const at = new Date().toISOString();
-    const headId = exec("INSERT INTO users (username, name, role, password_hash, must_change, created_at) VALUES ('vikram','Coach Vikram','coach','x',0,?)", at).lastId;
-    const juniorId = exec("INSERT INTO users (username, name, role, password_hash, must_change, created_at, reports_to) VALUES ('aman','Aman','junior','x',0,?,?)", at, headId).lastId;
-    const junior = { id: juniorId, username: 'aman', role: 'junior' as const };
-    const head = { id: headId, username: 'vikram', name: 'Coach Vikram', role: 'coach' as const, mustChange: false, totp: false };
-    assert.equal(custodianFor(junior), 'vikram');
+    const headId = exec("INSERT INTO users (username, name, role, password_hash, must_change, created_at) VALUES ('vikram','Manager Vikram','manager','x',0,?)", at).lastId;
+    const juniorId = exec("INSERT INTO users (username, name, role, password_hash, must_change, created_at, reports_to) VALUES ('aman','Aman','assistant','x',0,?,?)", at, headId).lastId;
+    const assistant = { id: juniorId, username: 'aman', role: 'assistant' as const };
+    const head = { id: headId, username: 'vikram', name: 'Manager Vikram', role: 'manager' as const, mustChange: false, totp: false };
+    assert.equal(custodianFor(assistant), 'vikram');
     assert.equal(custodianFor(head), 'vikram');
 
-    const b = createBooking({ ...base, phone: '919876511111', name: 'Cash Player', slots: [{ courtId: 2, start: 13 * 60 }], source: 'desk', status: 'reserved', actor: 'aman', staff: true });
-    const p = recordPayment({ bookingId: b.id, direction: 'in', category: 'court', method: 'cash', amount: 50000, reference: '', date: b.date, note: '', verified: true, actor: 'aman', collectedBy: 'aman', custodian: custodianFor(junior) });
+    const b = createBooking({ ...base, phone: '919876511111', name: 'Cash Player', slots: [{ spaceId: 2, start: 13 * 60 }], source: 'desk', status: 'reserved', actor: 'aman', staff: true });
+    const p = recordPayment({ bookingId: b.id, direction: 'in', category: 'space', method: 'cash', amount: 50000, reference: '', date: b.date, note: '', verified: true, actor: 'aman', collectedBy: 'aman', custodian: custodianFor(assistant) });
     assert.equal(get<{ collected_by: string; custodian: string }>('SELECT collected_by, custodian FROM payments WHERE id = ?', p.id)!.custodian, 'vikram');
     assert.equal(balances('vikram')[0].onHand, 50000);
 

@@ -1,14 +1,12 @@
 /**
- * GST for an Indian sports facility (shared by the server and the admin screens).
+ * Indian GST (shared by the server and the admin screens).
  *
- * India replaced VAT with GST in 2017; court hire and coaching are services taxed under GST.
- *  - Not registered (turnover under ₹20 lakh for services in Rajasthan): a plain Receipt, no tax.
- *  - Regular registration: a Tax Invoice. The venue is in Jodhpur, so the place of supply of court
- *    hire is Rajasthan (code 08): CGST + SGST, half the rate each; IGST only when a manual invoice
- *    names another state as the place of supply.
+ *  - Not registered (turnover under the registration threshold): a plain Receipt, no tax.
+ *  - Regular registration: a Tax Invoice. Bookings are supplied where the business is, so the place
+ *    of supply is the business's own state: CGST + SGST, half the rate each; IGST only when a manual
+ *    invoice names another state as the place of supply.
  *  - Composition scheme: a Bill of Supply, no tax collected from the customer.
- * The rate and SAC code are settings (default 18%, SAC 999652 "sports facility operation services")
- * so the academy's CA can set them; nothing here is legal advice.
+ * The rate and SAC code are settings for the business's CA to set; nothing here is legal advice.
  */
 
 export type GstMode = 'none' | 'regular' | 'composition';

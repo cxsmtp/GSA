@@ -10,30 +10,30 @@ import { InstagramIcon } from '@/components/ui/BrandIcons';
 import { Field, inputCls } from '@/components/ui/Field';
 import { Btn, Card, Segmented, Spinner, staff, useAction, useStaff, useToast } from './ui';
 
-type Sub = 'academy' | 'payments' | 'gst' | 'instagram' | 'team' | 'security';
+type Sub = 'business' | 'payments' | 'gst' | 'instagram' | 'team' | 'security';
 
 interface S {
-  academy: Record<string, string>;
+  business: Record<string, string>;
   booking: { upiEnabled: boolean; razorpayEnabled: boolean };
   gst: { mode: string; gstin: string; legalName: string; ratePct: number; sac: string; pricesIncludeGst: boolean; invoicePrefix: string; thresholdPaise: number; terms: string };
   integrations: { razorpay: boolean; razorpayWebhook: boolean; whatsappApi: boolean };
 }
 
 export function SettingsTab() {
-  const [sub, setSub] = useState<Sub>('academy');
+  const [sub, setSub] = useState<Sub>('business');
   const { data, loading, reload } = useStaff<S>('settings');
   return (
     <div className="space-y-4">
       <Segmented value={sub} onChange={setSub} options={[
-        { value: 'academy', label: 'Academy' }, { value: 'payments', label: 'Payments & WhatsApp' }, { value: 'gst', label: 'GST & bills' },
+        { value: 'business', label: 'Business' }, { value: 'payments', label: 'Payments & WhatsApp' }, { value: 'gst', label: 'GST & bills' },
         { value: 'instagram', label: 'Instagram & links' }, { value: 'team', label: 'Team' }, { value: 'security', label: 'Audit & backup' },
       ]} />
       {loading && !data ? <Spinner /> : data && (
         <>
-          {sub === 'academy' && <AcademyForm a={data.academy} reload={reload} />}
+          {sub === 'business' && <BusinessForm a={data.business} reload={reload} />}
           {sub === 'payments' && <Payments s={data} reload={reload} />}
           {sub === 'gst' && <GstForm g={data.gst} reload={reload} />}
-          {sub === 'instagram' && <InstagramKit handle={data.academy.instagram} />}
+          {sub === 'instagram' && <InstagramKit handle={data.business.instagram} />}
           {sub === 'team' && <Team />}
           {sub === 'security' && <AuditBackup />}
         </>
@@ -42,21 +42,21 @@ export function SettingsTab() {
   );
 }
 
-function AcademyForm({ a, reload }: { a: Record<string, string>; reload: () => void }) {
+function BusinessForm({ a, reload }: { a: Record<string, string>; reload: () => void }) {
   const { busy, run } = useAction();
   const [f, setF] = useState(a);
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
   const fields: [string, string, string?][] = [
-    ['name', 'Academy name'], ['tagline', 'Tagline'], ['address', 'Address'], ['city', 'City'], ['pincode', 'PIN code'],
+    ['name', 'Business name'], ['tagline', 'Tagline'], ['address', 'Address'], ['city', 'City'], ['pincode', 'PIN code'],
     ['phone', 'Phone (shown on site & invoices)'], ['whatsapp', 'WhatsApp number (receives player confirmations)', '10-digit mobile'], ['email', 'Email'],
-    ['mapUrl', 'Google Maps link', 'https://maps.app.goo.gl/…'], ['instagram', 'Instagram username', 'gsa.badminton'],
+    ['mapUrl', 'Google Maps link', 'https://maps.app.goo.gl/…'], ['instagram', 'Instagram username', 'yourbusiness'], ['messageNote', 'Last line of WhatsApp confirmations', 'e.g. arrival instructions'],
   ];
   return (
-    <Card title="Academy profile">
-      <form className="space-y-3" onSubmit={async (e) => { e.preventDefault(); if (await run(() => staff('settings/academy', 'PUT', f), 'Saved')) reload(); }}>
+    <Card title="Business profile">
+      <form className="space-y-3" onSubmit={async (e) => { e.preventDefault(); if (await run(() => staff('settings/business', 'PUT', f), 'Saved')) reload(); }}>
         <div className="grid sm:grid-cols-2 gap-3">
           {fields.map(([k, label, ph]) => <Field key={k} label={label}><input className={inputCls} value={f[k] ?? ''} onChange={set(k)} placeholder={ph} /></Field>)}
-          <Field label="State"><select className={inputCls} value={f.stateCode} onChange={set('stateCode')}>{Object.entries(STATES).map(([c, n]) => <option key={c} value={c}>{c} · {n}</option>)}</select></Field>
+          <Field label="State"><select className={inputCls} value={f.stateCode} onChange={set('stateCode')}><option value="">Choose state…</option>{Object.entries(STATES).map(([c, n]) => <option key={c} value={c}>{c} · {n}</option>)}</select></Field>
         </div>
         <Btn tone="lime" busy={busy} className="w-full">Save profile</Btn>
       </form>
@@ -72,14 +72,14 @@ function Status({ on, label }: { on: boolean; label: string }) {
 
 function Payments({ s, reload }: { s: S; reload: () => void }) {
   const { busy, run } = useAction();
-  const [vpa, setVpa] = useState(s.academy.upiVpa ?? '');
-  const [payee, setPayee] = useState(s.academy.upiPayee ?? '');
+  const [vpa, setVpa] = useState(s.business.upiVpa ?? '');
+  const [payee, setPayee] = useState(s.business.upiPayee ?? '');
   return (
     <div className="space-y-4">
       <Card title="UPI (direct, 0% fee)">
-        <form className="space-y-3" onSubmit={async (e) => { e.preventDefault(); if (await run(() => staff('settings/academy', 'PUT', { upiVpa: vpa, upiPayee: payee }), 'UPI saved')) reload(); }}>
+        <form className="space-y-3" onSubmit={async (e) => { e.preventDefault(); if (await run(() => staff('settings/business', 'PUT', { upiVpa: vpa, upiPayee: payee }), 'UPI saved')) reload(); }}>
           <Field label="UPI ID" hint="Use a business/merchant UPI ID (from your bank, PhonePe Business, Paytm Business or GPay for Business): personal IDs may be limited by apps."><input className={inputCls} value={vpa} onChange={(e) => setVpa(e.target.value)} placeholder="gsasports@okhdfcbank" /></Field>
-          <Field label="Name shown in the UPI app"><input className={inputCls} value={payee} onChange={(e) => setPayee(e.target.value)} placeholder="GSA Sports" /></Field>
+          <Field label="Name shown in the UPI app"><input className={inputCls} value={payee} onChange={(e) => setPayee(e.target.value)} placeholder="Business name" /></Field>
           <Btn tone="lime" busy={busy}>Save UPI</Btn>
         </form>
         <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" className="accent-lime w-5 h-5" checked={s.booking.upiEnabled} onChange={(e) => run(() => staff('settings/booking', 'PUT', { upiEnabled: e.target.checked }), 'Saved').then(reload)} /> Offer UPI / QR on the pay page</label>
@@ -125,8 +125,8 @@ function GstForm({ g, reload }: { g: S['gst']; reload: () => void }) {
         {f.mode === 'regular' && (
           <div className="grid grid-cols-2 gap-3">
             <Field label="GST rate"><select className={inputCls} value={f.ratePct} onChange={set('ratePct')}>{['0', '5', '12', '18', '28'].map((r) => <option key={r} value={r}>{r}%</option>)}</select></Field>
-            <Field label="SAC code" hint="999652: sports facility operation"><input className={inputCls} value={f.sac} onChange={set('sac')} /></Field>
-            <label className="col-span-2 flex items-center gap-2 text-sm"><input type="checkbox" className="accent-lime w-5 h-5" checked={f.pricesIncludeGst} onChange={(e) => setF({ ...f, pricesIncludeGst: e.target.checked })} /> Court prices already include GST</label>
+            <Field label="SAC code" hint="Ask your CA for the service code"><input className={inputCls} value={f.sac} onChange={set('sac')} /></Field>
+            <label className="col-span-2 flex items-center gap-2 text-sm"><input type="checkbox" className="accent-lime w-5 h-5" checked={f.pricesIncludeGst} onChange={(e) => setF({ ...f, pricesIncludeGst: e.target.checked })} /> Space prices already include GST</label>
           </div>
         )}
         <div className="grid grid-cols-2 gap-3">
@@ -154,7 +154,7 @@ function InstagramKit({ handle }: { handle: string }) {
   const links = [
     { label: 'Instagram bio / “Book now” button', url: `${origin}/?src=instagram` },
     { label: 'Instagram Story link sticker', url: `${origin}/?src=ig_story` },
-    { label: 'Tomorrow (Story: “Courts open tomorrow”)', url: `${origin}/?src=ig_story&date=${tomorrow}` },
+    { label: 'Tomorrow (Story: “Spaces open tomorrow”)', url: `${origin}/?src=ig_story&date=${tomorrow}` },
     { label: 'WhatsApp status / groups', url: `${origin}/?src=whatsapp` },
     { label: 'Google Business profile', url: `${origin}/?src=google` },
   ];
@@ -164,10 +164,10 @@ function InstagramKit({ handle }: { handle: string }) {
         <ol className="list-decimal pl-5 space-y-1.5 text-sm text-soft">
           <li>Instagram → Edit profile → <b>Action buttons</b> → Book now / Reserve → Add link → paste the first link. (Or put it in <b>Links</b> on your bio.)</li>
           <li>In Stories add a <b>Link</b> sticker with the Story link.</li>
-          <li>Add your Instagram username in Academy so players can DM you, and every booking from Instagram is counted (Money → Funds → Bookings by channel).</li>
+          <li>Add your Instagram username in Business so players can DM you, and every booking from Instagram is counted (Money → Funds → Bookings by channel).</li>
           <li>Instagram&apos;s own browser opens the booking page; for payment the page offers UPI app buttons, the QR and “Open in browser” when needed.</li>
         </ol>
-        {!handle && <p className="mt-2 text-xs text-amber">Instagram username not set yet (Academy tab).</p>}
+        {!handle && <p className="mt-2 text-xs text-amber">Instagram username not set yet (Business tab).</p>}
       </Card>
       <Card title="Share links">
         <ul className="space-y-2">
@@ -180,7 +180,7 @@ function InstagramKit({ handle }: { handle: string }) {
         </ul>
       </Card>
       {poster && (
-        <Card title="QR poster for the counter & courts">
+        <Card title="QR poster for the counter & spaces">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={poster} alt="QR code to the booking page" className="w-48 mx-auto rounded-2xl bg-white p-2" />
           <a href={poster} download="gsa-booking-qr.png" className="mt-3 flex items-center justify-center gap-2 text-sm font-semibold text-cyan"><Download className="w-4 h-4" /> Download QR (PNG)</a>
@@ -195,25 +195,25 @@ interface User { id: number; username: string; name: string; role: Role; active:
 function Team() {
   const { data, loading, reload } = useStaff<{ users: User[] }>('users');
   const { busy, run } = useAction();
-  const [f, setF] = useState({ username: '', name: '', role: 'junior' as Role, reportsTo: '' });
+  const [f, setF] = useState({ username: '', name: '', role: 'assistant' as Role, reportsTo: '' });
   const [secret, setSecret] = useState<{ username: string; password: string } | null>(null);
   const users = data?.users ?? [];
-  const heads = users.filter((u) => u.active && u.role !== 'junior');
+  const heads = users.filter((u) => u.active && u.role !== 'assistant');
   const nameOf = (id: number | null) => users.find((u) => u.id === id)?.name;
   return (
     <div className="space-y-4">
       <Card title="Add a user">
         <form className="grid grid-cols-2 gap-2" onSubmit={async (e) => {
           e.preventDefault();
-          const r = await run(() => staff<{ username: string; password: string }>('users', 'POST', { ...f, reportsTo: f.role === 'junior' && f.reportsTo ? Number(f.reportsTo) : undefined }), 'User added');
-          if (r) { setSecret(r); setF({ username: '', name: '', role: 'junior', reportsTo: '' }); void reload(); }
+          const r = await run(() => staff<{ username: string; password: string }>('users', 'POST', { ...f, reportsTo: f.role === 'assistant' && f.reportsTo ? Number(f.reportsTo) : undefined }), 'User added');
+          if (r) { setSecret(r); setF({ username: '', name: '', role: 'assistant', reportsTo: '' }); void reload(); }
         }}>
           <input className={inputCls} placeholder="Name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} required />
           <input className={inputCls} placeholder="username" value={f.username} onChange={(e) => setF({ ...f, username: e.target.value.toLowerCase() })} required autoCapitalize="none" />
           <select className={inputCls} value={f.role} onChange={(e) => setF({ ...f, role: e.target.value as Role })} aria-label="Role">
             {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
           </select>
-          {f.role === 'junior' ? (
+          {f.role === 'assistant' ? (
             <select className={inputCls} value={f.reportsTo} onChange={(e) => setF({ ...f, reportsTo: e.target.value })} aria-label="Reports to" required>
               <option value="">Reports to…</option>
               {heads.map((u) => <option key={u.id} value={u.id}>{u.name} ({ROLE_LABEL[u.role]})</option>)}
@@ -226,7 +226,7 @@ function Team() {
             Give <b>{secret.username}</b> this one-time password (shown once): <code className="font-mono text-lime select-all">{secret.password}</code>. They choose their own at first sign-in at <code>/admin</code>.
           </div>
         )}
-        <p className="text-[11px] text-muted mt-2">A junior coach&apos;s cash goes on the name of the head coach they report to.</p>
+        <p className="text-[11px] text-muted mt-2">A assistant&apos;s cash goes on the name of the manager they report to.</p>
       </Card>
 
       {loading && !data ? <Spinner /> : (
@@ -235,13 +235,13 @@ function Team() {
             <li key={u.id} className="rounded-2xl border border-line bg-panel/70 p-3 space-y-2">
               <div>
                 <div className="font-semibold">{u.name} <span className="text-xs text-muted">@{u.username}</span></div>
-                <div className="text-xs text-soft">{ROLE_LABEL[u.role]}{u.role === 'junior' ? ` · reports to ${nameOf(u.reports_to) ?? '— not set'}` : ''}{u.totp ? ' · 2-step on' : ''}{u.active ? '' : ' · deactivated'}{u.must_change ? ' · first sign-in pending' : ''}{u.last_login_at ? ` · last in ${fmtStamp(u.last_login_at)}` : ''}</div>
+                <div className="text-xs text-soft">{ROLE_LABEL[u.role]}{u.role === 'assistant' ? ` · reports to ${nameOf(u.reports_to) ?? '— not set'}` : ''}{u.totp ? ' · 2-step on' : ''}{u.active ? '' : ' · deactivated'}{u.must_change ? ' · first sign-in pending' : ''}{u.last_login_at ? ` · last in ${fmtStamp(u.last_login_at)}` : ''}</div>
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <select className={`${inputCls} py-2 text-sm`} value={u.role} aria-label="Role" onChange={(e) => run(() => staff(`users/${u.id}`, 'PATCH', { role: e.target.value }), 'Role changed — they sign in again').then(reload)}>
                   {ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
                 </select>
-                {u.role === 'junior' && (
+                {u.role === 'assistant' && (
                   <select className={`${inputCls} py-2 text-sm`} value={u.reports_to ?? ''} aria-label="Reports to" onChange={(e) => run(() => staff(`users/${u.id}`, 'PATCH', { reportsTo: e.target.value ? Number(e.target.value) : null }), 'Saved').then(reload)}>
                     <option value="">Reports to…</option>
                     {heads.map((h) => <option key={h.id} value={h.id}>{h.name}</option>)}

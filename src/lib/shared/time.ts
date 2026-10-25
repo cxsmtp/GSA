@@ -1,5 +1,5 @@
 /**
- * Time in Jodhpur. India has one time zone (IST, UTC+05:30) and no daylight saving, so a fixed
+ * Time in India. India has one time zone (IST, UTC+05:30) and no daylight saving, so a fixed
  * offset is exact. Dates are 'YYYY-MM-DD' strings in IST; a slot's time is minutes since midnight.
  */
 const IST_OFFSET_MS = 330 * 60 * 1000;

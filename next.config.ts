@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next';
+import pkg from './package.json';
 
 /**
  * Security headers on every response (pattern from the buh project). Scripts only from this site
@@ -27,6 +28,8 @@ const csp = [
 
 const nextConfig: NextConfig = {
   output: 'standalone',
+  // Shown in the staff app, so "which build is this?" has one answer.
+  env: { NEXT_PUBLIC_APP_VERSION: pkg.version },
   poweredByHeader: false,
   images: { unoptimized: true },
   async headers() {

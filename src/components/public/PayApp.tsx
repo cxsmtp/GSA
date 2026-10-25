@@ -81,7 +81,7 @@ export function PayApp({ initial }: { initial: PublicBooking }) {
           {b.razorpay && <RazorpayButton b={b} onDone={setB} />}
           {b.upi && <UpiPanel b={b} os={os} />}
           {!b.upi && !b.razorpay && (
-            <div className="rounded-3xl border border-amber/40 bg-amber/10 p-4 text-sm">Online payment isn&apos;t set up yet. Please pay at the desk or call {b.academy.phone || 'us'}; your slots are held for now.</div>
+            <div className="rounded-3xl border border-amber/40 bg-amber/10 p-4 text-sm">Online payment isn&apos;t set up yet. Please pay at the desk or call {b.business.phone || 'us'}; your slots are held for now.</div>
           )}
           {b.upi && <UtrForm b={b} onDone={setB} />}
         </>
@@ -100,10 +100,10 @@ export function PayApp({ initial }: { initial: PublicBooking }) {
 
 function StatusHero({ b, timer }: { b: PublicBooking; timer: string }) {
   const map = {
-    held: { title: 'Pay to confirm', sub: 'Your court is held for you', tone: 'text-lime', icon: Zap },
-    submitted: { title: b.phoneBooking ? 'Court booked' : 'Payment received', sub: b.phoneBooking ? 'Payment received — being verified' : 'We are verifying it — confirmation comes on WhatsApp', tone: 'text-cyan', icon: b.phoneBooking ? CheckCircle2 : Loader2 },
-    reserved: { title: 'Court booked', sub: 'Payment due — pay at the venue, or right here now', tone: 'text-cyan', icon: CalendarDays },
-    confirmed: { title: "You're on court!", sub: 'Booking confirmed', tone: 'text-ok', icon: CheckCircle2 },
+    held: { title: 'Pay to confirm', sub: 'Your slot is held for you', tone: 'text-lime', icon: Zap },
+    submitted: { title: b.phoneBooking ? 'Space booked' : 'Payment received', sub: b.phoneBooking ? 'Payment received — being verified' : 'We are verifying it — confirmation comes on WhatsApp', tone: 'text-cyan', icon: b.phoneBooking ? CheckCircle2 : Loader2 },
+    reserved: { title: 'Space booked', sub: 'Payment due — pay at the venue, or right here now', tone: 'text-cyan', icon: CalendarDays },
+    confirmed: { title: "You're booked!", sub: 'Booking confirmed', tone: 'text-ok', icon: CheckCircle2 },
     expired: { title: 'Hold expired', sub: 'Already paid? Enter your UPI reference below and we will restore it', tone: 'text-amber', icon: TriangleAlert },
     cancelled: { title: 'Cancelled', sub: b.cancelReason || 'This booking was cancelled', tone: 'text-bad', icon: TriangleAlert },
   } as const;
@@ -138,8 +138,8 @@ function Summary({ b }: { b: PublicBooking }) {
       <div className="text-sm text-soft">{b.dateLabel}</div>
       <ul className="mt-2 space-y-1.5">
         {b.slots.map((s) => (
-          <li key={`${s.court}${s.start}`} className="flex justify-between text-sm">
-            <span className="font-medium">{s.court} · {fmtTime(s.start)}–{fmtTime(s.end)}</span>
+          <li key={`${s.space}${s.start}`} className="flex justify-between text-sm">
+            <span className="font-medium">{s.space} · {fmtTime(s.start)}–{fmtTime(s.end)}</span>
             <span className="text-soft">{rupees(s.price)}</span>
           </li>
         ))}
@@ -192,8 +192,8 @@ function RazorpayButton({ b, onDone }: { b: PublicBooking; onDone: (b: PublicBoo
         order_id: r.order.orderId,
         amount: r.order.amount,
         currency: 'INR',
-        name: b.academy.name,
-        description: `Court booking ${b.ref}`,
+        name: b.business.name,
+        description: `Space booking ${b.ref}`,
         prefill: { name: b.name },
         theme: { color: '#7c4dff' },
         config: { display: { preferences: { show_default_blocks: true } } },
@@ -341,7 +341,7 @@ function ConfirmedActions({ b }: { b: PublicBooking }) {
   const first = b.slots[0];
   const stamp = (min: number) => `${b.date.replace(/-/g, '')}T${String(Math.floor(min / 60)).padStart(2, '0')}${String(min % 60).padStart(2, '0')}00`;
   const gcal = first
-    ? `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(`Badminton · ${b.academy.name}`)}&dates=${stamp(Math.min(...b.slots.map((s) => s.start)))}/${stamp(Math.max(...b.slots.map((s) => s.end)))}&ctz=Asia/Kolkata&details=${encodeURIComponent(`${b.ref}: ${b.slotsLabel}`)}&location=${encodeURIComponent(b.academy.address)}`
+    ? `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${encodeURIComponent(`Booking · ${b.business.name}`)}&dates=${stamp(Math.min(...b.slots.map((s) => s.start)))}/${stamp(Math.max(...b.slots.map((s) => s.end)))}&ctz=Asia/Kolkata&details=${encodeURIComponent(`${b.ref}: ${b.slotsLabel}`)}&location=${encodeURIComponent(b.business.address)}`
     : '';
   return (
     <section className="grid grid-cols-2 gap-2">
@@ -355,8 +355,8 @@ function ConfirmedActions({ b }: { b: PublicBooking }) {
           <CalendarDays className="w-4 h-4 text-lime" /> Add to calendar
         </a>
       )}
-      {b.academy.mapUrl && (
-        <a href={b.academy.mapUrl} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 rounded-2xl border border-line bg-panel py-3 text-sm font-semibold">
+      {b.business.mapUrl && (
+        <a href={b.business.mapUrl} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 rounded-2xl border border-line bg-panel py-3 text-sm font-semibold">
           <MapPin className="w-4 h-4 text-pink" /> Directions
         </a>
       )}

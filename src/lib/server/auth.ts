@@ -12,8 +12,8 @@ import { decrypt, randomToken, sha256 } from './secrets';
 import { verifyTotp } from './totp';
 
 /**
- * Staff sign-in. Roles and what each may do are in src/lib/shared/rbac.ts (admin, head coach, junior
- * coach); every staff route names a permission and requireUser checks it on the server.
+ * Staff sign-in. Roles and what each may do are in src/lib/shared/rbac.ts (admin, manager, assistant
+ * manager); every staff route names a permission and requireUser checks it on the server.
  *
  * Sessions: a random 256-bit token in an HttpOnly, Secure, SameSite=Strict cookie (__Host- prefix in
  * production); the database keeps only its hash. 12 h idle / 7 days at most; signing out, a password

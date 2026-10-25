@@ -3,7 +3,7 @@ import { get, run } from './db';
 
 /** Settings live in the database as one JSON document per group, merged over safe defaults. */
 
-export interface AcademySettings {
+export interface BusinessSettings {
   name: string;
   tagline: string;
   address: string;
@@ -18,6 +18,8 @@ export interface AcademySettings {
   instagram: string;
   upiVpa: string;
   upiPayee: string;
+  /** Last line of every WhatsApp confirmation (arrival instructions and the like). */
+  messageNote: string;
 }
 
 export interface DayHours {
@@ -48,13 +50,13 @@ export interface AboutSettings {
 const DEFAULT_HOURS: DayHours = { open: 5 * 60, close: 23 * 60, closed: false };
 
 export const DEFAULTS = {
-  academy: {
-    name: 'GSA Badminton Arena',
-    tagline: 'Book. Smash. Repeat.',
+  business: {
+    name: 'GSA',
+    tagline: 'Book your slot in seconds.',
     address: '',
-    city: 'Jodhpur',
-    state: 'Rajasthan',
-    stateCode: '08',
+    city: '',
+    state: '',
+    stateCode: '',
     pincode: '',
     phone: '',
     whatsapp: '',
@@ -63,7 +65,8 @@ export const DEFAULTS = {
     instagram: '',
     upiVpa: '',
     upiPayee: '',
-  } satisfies AcademySettings,
+    messageNote: '',
+  } satisfies BusinessSettings,
   booking: {
     hours: Array.from({ length: 7 }, () => ({ ...DEFAULT_HOURS })),
     slotMinutes: 60,
@@ -80,21 +83,21 @@ export const DEFAULTS = {
     gstin: '',
     legalName: '',
     ratePct: 18,
-    sac: '999652',
+    sac: '',
     pricesIncludeGst: true,
     invoicePrefix: 'GSA',
     thresholdPaise: 20_00_000_00,
-    terms: 'Bookings are non-transferable. Cancellations as per academy policy.',
+    terms: 'Bookings are non-transferable. Cancellations as per business policy.',
   } satisfies GstSettings,
   about: {
-    headline: 'Where Jodhpur plays badminton',
-    story: 'World-class wooden courts, bright anti-glare lighting and coaching for every level — from first rally to state championships.',
-    highlights: ['Synthetic & wooden courts', 'Certified coaches', 'Open 5 AM – 11 PM'],
+    headline: 'About us',
+    story: '',
+    highlights: [],
   } satisfies AboutSettings,
 };
 
 export type SettingsGroup = keyof typeof DEFAULTS;
-type Shape = { academy: AcademySettings; booking: BookingSettings; gst: GstSettings; about: AboutSettings };
+type Shape = { business: BusinessSettings; booking: BookingSettings; gst: GstSettings; about: AboutSettings };
 
 const cache = new Map<string, unknown>();
 

@@ -15,7 +15,7 @@ import { sendAutomaticConfirmation } from './whatsapp';
  * Collecting money.
  *
  * Direct UPI (free, no gateway): the pay page opens the player's UPI app (Google Pay, PhonePe, Paytm,
- * BHIM…) with the academy's UPI ID and the exact amount filled in, or shows the same as a QR code to
+ * BHIM…) with the business's UPI ID and the exact amount filled in, or shows the same as a QR code to
  * scan. The player then types the 12-digit UPI reference (UTR); the admin checks it against the
  * bank app and taps Verify. A UTR can be used for one booking only.
  *
@@ -46,14 +46,14 @@ export interface PaymentRow {
 }
 
 export function upiLink(amountPaise: number, ref: string): string | null {
-  const a = getSettings('academy');
+  const a = getSettings('business');
   if (!a.upiVpa) return null;
   const p = new URLSearchParams({
     pa: a.upiVpa,
     pn: (a.upiPayee || a.name).slice(0, 50),
     am: (amountPaise / 100).toFixed(2),
     cu: 'INR',
-    tn: `${ref} court booking`.slice(0, 50),
+    tn: `${ref} space booking`.slice(0, 50),
   });
   return `upi://pay?${p.toString().replace(/\+/g, '%20')}`;
 }
@@ -72,14 +72,14 @@ export function submitUtr(b: BookingRow, utrRaw: string, now = Date.now()): Paym
     const pending = get<PaymentRow>("SELECT * FROM payments WHERE booking_id = ? AND status = 'pending' ORDER BY id DESC LIMIT 1", b.id);
     if (pending) return pending;
   }
-  // Paid just after the hold ran out: take the courts back if they are still free.
+  // Paid just after the hold ran out: take the spaces back if they are still free.
   if (fresh.status === 'expired') reclaimSlots(fresh);
   return tx(() => {
     let id: number;
     try {
       id = run(
         `INSERT INTO payments (booking_id, category, method, amount_paise, reference, status, date, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?)`,
-        b.id, 'court', 'upi', fresh.amount_paise, utr, 'pending', todayIst(now), 'player', new Date(now).toISOString(),
+        b.id, 'space', 'upi', fresh.amount_paise, utr, 'pending', todayIst(now), 'player', new Date(now).toISOString(),
       ).lastId;
     } catch (err) {
       if (isUniqueViolation(err)) throw new HttpError(409, 'This UPI reference was already used for another booking. Please check the number.');
@@ -222,7 +222,7 @@ export async function razorpayOrder(b: BookingRow): Promise<{ orderId: string; k
   if (order.amount !== b.amount_paise) throw new HttpError(502, 'The gateway returned a different amount. Please try again.');
   run(
     `INSERT INTO payments (booking_id, category, method, amount_paise, reference, status, date, gateway_order_id, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?,?)`,
-    b.id, 'court', 'razorpay', b.amount_paise, '', 'pending', todayIst(), order.id, 'player', new Date().toISOString(),
+    b.id, 'space', 'razorpay', b.amount_paise, '', 'pending', todayIst(), order.id, 'player', new Date().toISOString(),
   );
   return { orderId: order.id, keyId: process.env.RAZORPAY_KEY_ID!, amount: b.amount_paise };
 }
@@ -251,7 +251,7 @@ export async function settleRazorpay(orderId: string, paymentId: string, via: 'c
     return await confirmPaidBooking(p.booking_id, `razorpay:${via}`);
   } catch (err) {
     if (err instanceof HttpError && err.status === 409) {
-      // Paid, but the courts went to someone else after the hold ran out: flag for a refund.
+      // Paid, but the spaces went to someone else after the hold ran out: flag for a refund.
       run("UPDATE bookings SET note = TRIM(note || ' ⚠ Paid after hold expired and slots were taken: refund due.') WHERE id = ?", p.booking_id);
       audit('system', 'booking.refund_due', 'booking', p.booking_id, { orderId });
       return bookingById(p.booking_id) ?? null;

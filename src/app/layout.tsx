@@ -6,17 +6,17 @@ import { RegisterSW } from '@/components/RegisterSW';
 export const dynamic = 'force-dynamic';
 
 export async function generateMetadata(): Promise<Metadata> {
-  const a = getSettings('academy');
-  const description = `Book a badminton court at ${a.name}, ${a.city}. Live availability from 5 AM to 11 PM, instant UPI payment and WhatsApp confirmation.`;
+  const a = getSettings('business');
+  const description = `Book online at ${a.name}. Live availability, instant UPI payment and WhatsApp confirmation.`;
   return {
     metadataBase: process.env.APP_URL ? new URL(process.env.APP_URL) : undefined,
-    title: { default: `${a.name} · Book a court`, template: `%s · ${a.name}` },
+    title: { default: `${a.name} · Book a space`, template: `%s · ${a.name}` },
     description,
     applicationName: a.name,
     appleWebApp: { capable: true, title: a.name, statusBarStyle: 'black-translucent' },
     // Rich previews when the booking link is shared on Instagram, WhatsApp and Facebook.
-    openGraph: { type: 'website', title: `${a.name} — Book your court`, description, siteName: a.name },
-    twitter: { card: 'summary_large_image', title: `${a.name} — Book your court`, description },
+    openGraph: { type: 'website', title: `${a.name} — Book your slot`, description, siteName: a.name },
+    twitter: { card: 'summary_large_image', title: `${a.name} — Book your slot`, description },
     icons: { icon: '/icon.svg' },
   };
 }

@@ -5,20 +5,20 @@ import type { BookedSlot, BookingStatus, SlotRef } from '@/lib/shared/types';
 import { audit } from './audit';
 import { all, get, isUniqueViolation, run, tx } from './db';
 import { HttpError } from './http';
-import { activeCourts, buildDay, inBookingWindow } from './schedule';
+import { activeSpaces, buildDay, inBookingWindow } from './schedule';
 import { getSettings } from './settings';
 import { randomToken } from './secrets';
 
 /**
- * Bookings. A booking holds its courts through booking_slots rows (UNIQUE per court, date and
+ * Bookings. A booking holds its spaces through booking_slots rows (UNIQUE per space, date and
  * start), so two people can never hold the same slot: the second insert fails inside the same
  * transaction and that person is told the slot was just taken.
  *
  *   held       online, waiting for payment; released automatically after holdMinutes
- *   submitted  payment details given (UPI reference, or cash noted by the coach): waits for the admin
+ *   submitted  payment details given (UPI reference, or cash noted by the manager): waits for the admin
  *   reserved   made at the desk, payment to be collected at the venue (never expires)
  *   confirmed  paid and verified: invoice issued, WhatsApp confirmation sent
- *   cancelled / expired: courts released
+ *   cancelled / expired: spaces released
  */
 
 export interface BookingRow {
@@ -57,21 +57,21 @@ export function slotsOf(b: Pick<BookingRow, 'slots_json'>): BookedSlot[] {
   }
 }
 
-/** "Court 1 · 6:00 AM–8:00 AM, Court 2 · 7:00 PM–8:00 PM": consecutive slots on a court merge. */
+/** "Space 1 · 6:00 AM–8:00 AM, Space 2 · 7:00 PM–8:00 PM": consecutive slots on a space merge. */
 export function slotsLabel(slots: BookedSlot[]): string {
-  const byCourt = new Map<string, BookedSlot[]>();
-  for (const s of [...slots].sort((a, b) => a.courtId - b.courtId || a.start - b.start)) {
-    byCourt.set(s.courtName, [...(byCourt.get(s.courtName) || []), s]);
+  const bySpace = new Map<string, BookedSlot[]>();
+  for (const s of [...slots].sort((a, b) => a.spaceId - b.spaceId || a.start - b.start)) {
+    bySpace.set(s.spaceName, [...(bySpace.get(s.spaceName) || []), s]);
   }
   const parts: string[] = [];
-  for (const [court, list] of byCourt) {
+  for (const [space, list] of bySpace) {
     const ranges: [number, number][] = [];
     for (const s of list) {
       const last = ranges[ranges.length - 1];
       if (last && last[1] === s.start) last[1] = s.end;
       else ranges.push([s.start, s.end]);
     }
-    parts.push(`${court} · ${ranges.map(([a, b]) => `${fmtTime(a)}–${fmtTime(b)}`).join(', ')}`);
+    parts.push(`${space} · ${ranges.map(([a, b]) => `${fmtTime(a)}–${fmtTime(b)}`).join(', ')}`);
   }
   return parts.join('; ');
 }
@@ -123,7 +123,7 @@ export function createBooking(input: NewBooking, now = Date.now()): BookingRow {
   if (!input.staff && !inBookingWindow(input.date, now)) throw new HttpError(400, `Bookings open ${b.daysAhead} days ahead. Please pick another date.`);
   const seen = new Set<string>();
   for (const s of input.slots) {
-    const k = `${s.courtId}:${s.start}`;
+    const k = `${s.spaceId}:${s.start}`;
     if (seen.has(k)) throw new HttpError(400, 'The same slot was picked twice.');
     seen.add(k);
   }
@@ -131,15 +131,15 @@ export function createBooking(input: NewBooking, now = Date.now()): BookingRow {
   sweepExpired(now);
   return tx(() => {
     const grid = buildDay(input.date, { now });
-    const courts = new Map(activeCourts().map((c) => [c.id, c.name]));
+    const spaces = new Map(activeSpaces().map((c) => [c.id, c.name]));
     const picked: BookedSlot[] = input.slots.map((s) => {
-      const cell = grid.courts.find((c) => c.id === s.courtId)?.cells.find((x) => x.start === s.start);
+      const cell = grid.spaces.find((c) => c.id === s.spaceId)?.cells.find((x) => x.start === s.start);
       if (!cell) throw new HttpError(400, 'That slot does not exist. Please refresh.');
       const okState = cell.state === 'free' || (input.staff && cell.state === 'past');
-      if (!okState) throw new HttpError(409, `${courts.get(s.courtId)} at ${fmtTime(s.start)} was just taken. Please pick another slot.`, {}, { code: 'slot_taken' });
-      return { courtId: s.courtId, courtName: courts.get(s.courtId) || `Court ${s.courtId}`, start: cell.start, end: cell.end, price: cell.price };
+      if (!okState) throw new HttpError(409, `${spaces.get(s.spaceId)} at ${fmtTime(s.start)} was just taken. Please pick another slot.`, {}, { code: 'slot_taken' });
+      return { spaceId: s.spaceId, spaceName: spaces.get(s.spaceId) || `Space ${s.spaceId}`, start: cell.start, end: cell.end, price: cell.price };
     });
-    picked.sort((a, b2) => a.start - b2.start || a.courtId - b2.courtId);
+    picked.sort((a, b2) => a.start - b2.start || a.spaceId - b2.spaceId);
     const base = picked.reduce((n, s) => n + s.price, 0);
     const amount = payable(base, getSettings('gst'));
     const stamp = new Date(now).toISOString();
@@ -162,7 +162,7 @@ export function createBooking(input: NewBooking, now = Date.now()): BookingRow {
     if (!id) throw new HttpError(500, 'Could not create the booking. Please try again.');
     try {
       for (const s of picked) {
-        run('INSERT INTO booking_slots (booking_id, court_id, date, start_min, end_min, price_paise) VALUES (?,?,?,?,?,?)', id, s.courtId, input.date, s.start, s.end, s.price);
+        run('INSERT INTO booking_slots (booking_id, space_id, date, start_min, end_min, price_paise) VALUES (?,?,?,?,?,?)', id, s.spaceId, input.date, s.start, s.end, s.price);
       }
     } catch (err) {
       if (isUniqueViolation(err)) throw new HttpError(409, 'One of your slots was just taken. Please pick again.', {}, { code: 'slot_taken' });
@@ -183,7 +183,7 @@ export function bookingByToken(token: string): BookingRow | undefined {
 }
 
 /**
- * Take a released booking's courts back (a payment that arrived after its hold ran out). Throws 409
+ * Take a released booking's spaces back (a payment that arrived after its hold ran out). Throws 409
  * when someone else has a slot by now, leaving the booking as it was.
  */
 export function reclaimSlots(b: BookingRow) {
@@ -192,7 +192,7 @@ export function reclaimSlots(b: BookingRow) {
   tx(() => {
     try {
       for (const s of slotsOf(b)) {
-        run('INSERT INTO booking_slots (booking_id, court_id, date, start_min, end_min, price_paise) VALUES (?,?,?,?,?,?)', b.id, s.courtId, b.date, s.start, s.end, s.price);
+        run('INSERT INTO booking_slots (booking_id, space_id, date, start_min, end_min, price_paise) VALUES (?,?,?,?,?,?)', b.id, s.spaceId, b.date, s.start, s.end, s.price);
       }
     } catch (err) {
       if (isUniqueViolation(err)) throw new HttpError(409, 'These slots were booked by someone else after the hold ran out.', {}, { code: 'slot_taken' });

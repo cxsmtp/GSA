@@ -9,9 +9,9 @@ import { Btn, Spinner, useStaff } from './ui';
 import { NewBookingSheet } from './NewBookingSheet';
 import { BookingSheet } from './BookingSheet';
 
-export type Pick = { courtId: number; courtName: string; start: number; end: number; price: number };
+export type Pick = { spaceId: number; spaceName: string; start: number; end: number; price: number };
 
-/** The desk's live timetable: who is on which court, tap free slots to book a walk-in, tap a booking to manage it. */
+/** The desk's live timetable: who is on which space, tap free slots to book a walk-in, tap a booking to manage it. */
 export function StaffGrid({ onChanged }: { onChanged?: () => void }) {
   const [date, setDate] = useState(todayIst());
   const { data, loading, reload } = useStaff<{ grid: DayGrid }>(`day?date=${date}`);
@@ -26,7 +26,7 @@ export function StaffGrid({ onChanged }: { onChanged?: () => void }) {
   useEffect(() => setSel([]), [date]);
 
   const grid = data?.grid;
-  const starts = grid?.courts[0]?.cells.map((c) => c.start) ?? [];
+  const starts = grid?.spaces[0]?.cells.map((c) => c.start) ?? [];
   const changed = () => {
     setSel([]);
     void reload();
@@ -51,16 +51,16 @@ export function StaffGrid({ onChanged }: { onChanged?: () => void }) {
             <thead>
               <tr>
                 <th className="sticky left-0 bg-night z-10 w-14" />
-                {grid.courts.map((c) => <th key={c.id} className="px-1 py-1 font-semibold text-soft min-w-[7.5rem]">{c.name}</th>)}
+                {grid.spaces.map((c) => <th key={c.id} className="px-1 py-1 font-semibold text-soft min-w-[7.5rem]">{c.name}</th>)}
               </tr>
             </thead>
             <tbody>
               {starts.map((s) => (
                 <tr key={s}>
                   <th className="sticky left-0 bg-night z-10 text-left pl-1 font-semibold text-soft whitespace-nowrap">{fmtTimeShort(s)}</th>
-                  {grid.courts.map((c) => {
+                  {grid.spaces.map((c) => {
                     const cell = c.cells.find((x) => x.start === s)!;
-                    const picked = sel.some((x) => x.courtId === c.id && x.start === s);
+                    const picked = sel.some((x) => x.spaceId === c.id && x.start === s);
                     if (cell.bookingId) {
                       const tone = cell.kind === 'confirmed' ? 'bg-ok/15 border-ok/30 text-ok' : cell.kind === 'held' ? 'bg-amber/10 border-amber/30 text-amber' : cell.kind === 'submitted' ? 'bg-violet/20 border-violet/40 text-[#b39dff]' : 'bg-cyan/10 border-cyan/30 text-cyan';
                       return (
@@ -75,7 +75,7 @@ export function StaffGrid({ onChanged }: { onChanged?: () => void }) {
                     return (
                       <td key={c.id}>
                         <button
-                          onClick={() => setSel((x) => (picked ? x.filter((y) => !(y.courtId === c.id && y.start === s)) : [...x, { courtId: c.id, courtName: c.name, start: s, end: cell.end, price: cell.price }]))}
+                          onClick={() => setSel((x) => (picked ? x.filter((y) => !(y.spaceId === c.id && y.start === s)) : [...x, { spaceId: c.id, spaceName: c.name, start: s, end: cell.end, price: cell.price }]))}
                           className={`w-full h-11 rounded-lg border font-semibold ${picked ? 'bg-lime text-ink border-lime' : 'bg-panel-2 border-line text-muted hover:border-lime hover:text-lime'} ${cell.state === 'past' && !picked ? 'opacity-50' : ''}`}
                         >
                           {picked ? <Check className="w-4 h-4 mx-auto" /> : rupees(cell.price)}

@@ -10,7 +10,7 @@ import { normalizeIndianMobile } from '@/lib/shared/whatsapp';
 
 export const dynamic = 'force-dynamic';
 
-/** Create an online booking: holds the courts for a few minutes while the player pays. */
+/** Create an online booking: holds the spaces for a few minutes while the player pays. */
 export async function POST(req: Request) {
   try {
     await startup();
@@ -25,8 +25,8 @@ export async function POST(req: Request) {
     if (!Array.isArray(body.slots) || body.slots.length > 40) throw new HttpError(400, 'Pick your slots.');
     const slots: SlotRef[] = body.slots.map((s: unknown) => {
       const o = s as Record<string, unknown>;
-      if (!o || !Number.isInteger(o.courtId) || !Number.isInteger(o.start)) throw new HttpError(400, 'Invalid slot.');
-      return { courtId: o.courtId as number, start: o.start as number };
+      if (!o || !Number.isInteger(o.spaceId) || !Number.isInteger(o.start)) throw new HttpError(400, 'Invalid slot.');
+      return { spaceId: o.spaceId as number, start: o.start as number };
     });
     const name = str(body.name, 'Name', 80);
     if (name.length < 2) throw new HttpError(400, 'Please enter your name.');

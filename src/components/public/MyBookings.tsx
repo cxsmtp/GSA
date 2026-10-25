@@ -17,7 +17,7 @@ export function MyBookings() {
         <div className="rounded-3xl border border-line bg-panel/60 p-8 text-center space-y-4">
           <Ticket className="w-10 h-10 mx-auto text-muted" />
           <p className="text-soft">No bookings on this phone yet. Your confirmation link is also on WhatsApp.</p>
-          <Link href="/" className="btn-lime inline-block rounded-2xl px-6 py-3 font-bold">Book a court</Link>
+          <Link href="/" className="btn-lime inline-block rounded-2xl px-6 py-3 font-bold">Book a space</Link>
         </div>
       ) : (
         <ul className="space-y-2">

@@ -13,10 +13,10 @@ export const metadata: Metadata = { title: 'About us' };
 
 interface Person { id: number; name: string; role: string; bio: string; highlights: string; photo_media: string | null }
 
-/** About us: the academy's story, coaches and key people (added by the admin or coach in the admin app). */
+/** About us: the business's story, managers and key people (added by the admin or manager in the admin app). */
 export default async function AboutPage() {
   await startup();
-  const a = getSettings('academy');
+  const a = getSettings('business');
   const about = getSettings('about');
   const b = getSettings('booking');
   const people = all<Person>('SELECT id, name, role, bio, highlights, photo_media FROM people WHERE visible = 1 ORDER BY sort, id');
@@ -41,9 +41,9 @@ export default async function AboutPage() {
         </section>
 
         <section aria-labelledby="team">
-          <h2 id="team" className="font-display text-2xl font-bold">Coaches &amp; <span className="text-gradient">team</span></h2>
+          <h2 id="team" className="font-display text-2xl font-bold">Managers &amp; <span className="text-gradient">team</span></h2>
           {people.length === 0 ? (
-            <p className="mt-4 rounded-3xl border border-dashed border-line p-8 text-center text-muted">Our coaches will be introduced here soon.</p>
+            <p className="mt-4 rounded-3xl border border-dashed border-line p-8 text-center text-muted">Our managers will be introduced here soon.</p>
           ) : (
             <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {people.map((p, i) => (
@@ -99,7 +99,7 @@ export default async function AboutPage() {
         </section>
 
         <div className="text-center">
-          <Link href="/" className="btn-lime inline-block rounded-2xl px-8 py-4 font-bold">Book a court</Link>
+          <Link href="/" className="btn-lime inline-block rounded-2xl px-8 py-4 font-bold">Book a space</Link>
         </div>
       </main>
       <MobileNav />

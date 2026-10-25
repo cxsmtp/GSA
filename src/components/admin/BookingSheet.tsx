@@ -126,7 +126,7 @@ export function BookingSheet({ id, onClose, onChanged }: { id: number | null; on
                       </select>
                     </div>
                   )}
-                  <Btn tone="bad" busy={busy} disabled={!reason.trim()} className="w-full" onClick={() => act(() => staff(`bookings/${b.id}/cancel`, 'POST', { reason, refund: refund ? { amount: refund, method: refundMethod } : undefined }), 'Booking cancelled; courts released')}>
+                  <Btn tone="bad" busy={busy} disabled={!reason.trim()} className="w-full" onClick={() => act(() => staff(`bookings/${b.id}/cancel`, 'POST', { reason, refund: refund ? { amount: refund, method: refundMethod } : undefined }), 'Booking cancelled; spaces released')}>
                     Confirm cancel{refund ? ` & refund ₹${refund}` : ''}
                   </Btn>
                 </div>

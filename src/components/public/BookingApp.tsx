@@ -11,7 +11,7 @@ import { WhatsAppIcon } from '@/components/ui/BrandIcons';
 import { Field, inputCls } from '@/components/ui/Field';
 import { Sheet } from '@/components/ui/Sheet';
 
-type Sel = { courtId: number; courtName: string; start: number; end: number; price: number };
+type Sel = { spaceId: number; spaceName: string; start: number; end: number; price: number };
 
 const PERIODS = [
   { key: 'morning', label: 'Morning', icon: Sunrise, from: 0, to: 12 * 60 },
@@ -40,9 +40,9 @@ export function BookingApp({ config }: { config: PublicConfig }) {
       if (r.strip) setStrip(r.strip);
       setError('');
       // Drop picks that someone else just took.
-      setSel((s) => s.filter((x) => r.grid.date !== d || r.grid.courts.find((c) => c.id === x.courtId)?.cells.find((c) => c.start === x.start)?.state === 'free'));
+      setSel((s) => s.filter((x) => r.grid.date !== d || r.grid.spaces.find((c) => c.id === x.spaceId)?.cells.find((c) => c.start === x.start)?.state === 'free'));
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not load courts.');
+      setError(e instanceof Error ? e.message : 'Could not load spaces.');
     } finally {
       setLoading(false);
     }
@@ -72,26 +72,26 @@ export function BookingApp({ config }: { config: PublicConfig }) {
     setDate(d);
   };
 
-  const toggle = (courtId: number, courtName: string, c: Cell) => {
+  const toggle = (spaceId: number, spaceName: string, c: Cell) => {
     if (c.state !== 'free') return;
     setSel((s) => {
-      const has = s.some((x) => x.courtId === courtId && x.start === c.start);
-      if (has) return s.filter((x) => !(x.courtId === courtId && x.start === c.start));
+      const has = s.some((x) => x.spaceId === spaceId && x.start === c.start);
+      if (has) return s.filter((x) => !(x.spaceId === spaceId && x.start === c.start));
       if (s.length >= config.booking.maxSlots) {
         setError(`You can book up to ${config.booking.maxSlots} slots at a time.`);
         return s;
       }
       setError('');
       if ('vibrate' in navigator) navigator.vibrate?.(8);
-      return [...s, { courtId, courtName, start: c.start, end: c.end, price: c.price }];
+      return [...s, { spaceId, spaceName, start: c.start, end: c.end, price: c.price }];
     });
   };
 
   const base = sel.reduce((n, s) => n + s.price, 0);
   const total = config.gst.mode === 'regular' && !config.gst.pricesIncludeGst ? base + Math.round((base * config.gst.ratePct) / 100) : base;
-  const freeToday = grid ? grid.courts.reduce((n, c) => n + c.cells.filter((x) => x.state === 'free').length, 0) : 0;
-  // Rows already over on every court are hidden (today's early morning), so the open slots come first.
-  const starts = (grid?.courts[0]?.cells.map((c) => c.start) ?? []).filter((s) => grid!.courts.some((c) => c.cells.find((x) => x.start === s)?.state !== 'past'));
+  const freeToday = grid ? grid.spaces.reduce((n, c) => n + c.cells.filter((x) => x.state === 'free').length, 0) : 0;
+  // Rows already over on every space are hidden (today's early morning), so the open slots come first.
+  const starts = (grid?.spaces[0]?.cells.map((c) => c.start) ?? []).filter((s) => grid!.spaces.some((c) => c.cells.find((x) => x.start === s)?.state !== 'past'));
 
   return (
     <div className="mx-auto max-w-5xl px-4 pb-44 sm:pb-32">
@@ -99,12 +99,12 @@ export function BookingApp({ config }: { config: PublicConfig }) {
       <section className="pt-6 sm:pt-10 rise">
         <p className="inline-flex items-center gap-2 rounded-full border border-lime/30 bg-lime/10 px-3 py-1 text-xs font-semibold text-lime">
           <span className="relative flex w-2 h-2"><span className="absolute inset-0 rounded-full bg-lime pulse" /><span className="w-2 h-2 rounded-full bg-lime" /></span>
-          {loading ? 'Checking live courts…' : grid?.open ? `${freeToday} slots open ${date === config.today ? 'today' : 'on ' + fmtDate(date, { year: false })}` : 'Closed on this day'}
+          {loading ? 'Checking live availability…' : grid?.open ? `${freeToday} slots open ${date === config.today ? 'today' : 'on ' + fmtDate(date, { year: false })}` : 'Closed on this day'}
         </p>
         <h1 className="font-display mt-4 text-[2.1rem] leading-[1.05] sm:text-6xl font-extrabold tracking-tight">
-          Book your <span className="text-gradient">court.</span>
+          Book your <span className="text-gradient">slot.</span>
           <br />
-          <span className="text-soft text-2xl sm:text-4xl font-bold">{config.academy.tagline}</span>
+          <span className="text-soft text-2xl sm:text-4xl font-bold">{config.business.tagline}</span>
         </h1>
         <div className="mt-4 flex flex-wrap gap-2 text-xs text-soft">
           <span className="inline-flex items-center gap-1.5 rounded-full bg-panel/80 border border-line px-3 py-1.5"><Zap className="w-3.5 h-3.5 text-lime" /> Pay instantly with any UPI app</span>
@@ -155,15 +155,15 @@ export function BookingApp({ config }: { config: PublicConfig }) {
         <span className="flex items-center gap-1.5"><i className="w-3 h-3 rounded bg-panel-2 border border-cyan/40" /> Open</span>
         <span className="flex items-center gap-1.5"><i className="w-3 h-3 rounded bg-lime" /> Your pick</span>
         <span className="flex items-center gap-1.5"><i className="w-3 h-3 rounded bg-pink/30" /> Booked</span>
-        <span className="flex items-center gap-1.5"><i className="w-3 h-3 rounded bg-violet/40" /> Coaching / event</span>
+        <span className="flex items-center gap-1.5"><i className="w-3 h-3 rounded bg-violet/40" /> Training / event</span>
       </div>
 
       {/* Grid */}
-      <section className="mt-3" aria-label={`Courts on ${fmtDate(date)}`} aria-busy={loading}>
+      <section className="mt-3" aria-label={`Spaces on ${fmtDate(date)}`} aria-busy={loading}>
         {loading && !grid ? (
           <div className="grid place-items-center py-20 text-muted"><Loader2 className="w-6 h-6 animate-spin" /></div>
-        ) : !grid || !grid.open || !grid.courts.length ? (
-          <div className="rounded-3xl border border-line bg-panel/60 p-8 text-center text-soft">The courts are closed on {fmtDate(date)}. Please pick another day.</div>
+        ) : !grid || !grid.open || !grid.spaces.length ? (
+          <div className="rounded-3xl border border-line bg-panel/60 p-8 text-center text-soft">The spaces are closed on {fmtDate(date)}. Please pick another day.</div>
         ) : (
           <div className="space-y-5">
             {PERIODS.map((p) => {
@@ -171,7 +171,7 @@ export function BookingApp({ config }: { config: PublicConfig }) {
               if (!rows.length) return null;
               const Icon = p.icon;
               return (
-                <div key={p.key} className="rounded-3xl border border-line bg-panel/50 court-lines overflow-hidden">
+                <div key={p.key} className="rounded-3xl border border-line bg-panel/50 space-lines overflow-hidden">
                   <div className="flex items-center gap-2 px-4 py-2.5 border-b border-line/70 bg-night/40">
                     <Icon className="w-4 h-4 text-amber" aria-hidden="true" />
                     <h3 className="font-display text-xs font-semibold tracking-wide uppercase">{p.label}</h3>
@@ -181,7 +181,7 @@ export function BookingApp({ config }: { config: PublicConfig }) {
                       <thead>
                         <tr>
                           <th className="w-16 text-left text-[10px] font-semibold text-muted px-1 sticky left-0 bg-panel/90 backdrop-blur z-10" scope="col">Time</th>
-                          {grid.courts.map((c) => (
+                          {grid.spaces.map((c) => (
                             <th key={c.id} scope="col" className="text-[11px] font-semibold text-soft px-1 min-w-[5.6rem]">
                               {c.name}
                             </th>
@@ -192,12 +192,12 @@ export function BookingApp({ config }: { config: PublicConfig }) {
                         {rows.map((start) => (
                           <tr key={start}>
                             <th scope="row" className="text-left text-xs font-semibold text-soft whitespace-nowrap px-1 sticky left-0 bg-panel/90 backdrop-blur z-10">{fmtTimeShort(start)}</th>
-                            {grid.courts.map((c) => {
+                            {grid.spaces.map((c) => {
                               const cell = c.cells.find((x) => x.start === start)!;
-                              const picked = sel.some((x) => x.courtId === c.id && x.start === start);
+                              const picked = sel.some((x) => x.spaceId === c.id && x.start === start);
                               return (
                                 <td key={c.id} className="p-0">
-                                  <SlotButton cell={cell} picked={picked} court={c.name} onClick={() => toggle(c.id, c.name, cell)} />
+                                  <SlotButton cell={cell} picked={picked} space={c.name} onClick={() => toggle(c.id, c.name, cell)} />
                                 </td>
                               );
                             })}
@@ -250,8 +250,8 @@ export function BookingApp({ config }: { config: PublicConfig }) {
   );
 }
 
-function SlotButton({ cell, picked, court, onClick }: { cell: Cell; picked: boolean; court: string; onClick: () => void }) {
-  const label = `${court}, ${fmtTime(cell.start)} to ${fmtTime(cell.end)}`;
+function SlotButton({ cell, picked, space, onClick }: { cell: Cell; picked: boolean; space: string; onClick: () => void }) {
+  const label = `${space}, ${fmtTime(cell.start)} to ${fmtTime(cell.end)}`;
   if (picked)
     return (
       <button onClick={onClick} aria-pressed="true" aria-label={`${label}, selected. Tap to remove.`} className="w-full h-12 rounded-xl bg-lime text-ink font-bold text-sm flex items-center justify-center gap-1 shadow-[0_6px_20px_-6px] shadow-lime/80">
@@ -264,7 +264,7 @@ function SlotButton({ cell, picked, court, onClick }: { cell: Cell; picked: bool
         {rupees(cell.price)}
       </button>
     );
-  const text = cell.state === 'blocked' ? (cell.kind === 'coaching' ? 'Coaching' : cell.kind === 'event' ? 'Event' : cell.kind === 'maintenance' ? 'Closed' : 'Reserved') : cell.state === 'past' ? '—' : 'Booked';
+  const text = cell.state === 'blocked' ? (cell.kind === 'training' ? 'Training' : cell.kind === 'event' ? 'Event' : cell.kind === 'maintenance' ? 'Closed' : 'Reserved') : cell.state === 'past' ? '—' : 'Booked';
   const cls = cell.state === 'blocked' ? 'bg-violet/20 text-violet/90 border-violet/20' : cell.state === 'past' ? 'bg-transparent text-muted/40 border-line/40' : 'bg-pink/15 text-pink/80 border-pink/15';
   return (
     <div aria-label={`${label}, ${text}`} role="img" className={`w-full h-12 rounded-xl border text-[11px] font-semibold flex items-center justify-center ${cls}`}>
@@ -307,7 +307,7 @@ function DetailsSheet({
     setBusy(true);
     try {
       const r = await api<{ token: string; ref: string }>('/api/public/bookings', {
-        body: { date, slots: sel.map((s) => ({ courtId: s.courtId, start: s.start })), name, phone: digits, email: email || undefined, gstin: gstOn && gstin ? gstin : undefined, channel: detectChannel(), website: hp.current?.value || undefined },
+        body: { date, slots: sel.map((s) => ({ spaceId: s.spaceId, start: s.start })), name, phone: digits, email: email || undefined, gstin: gstOn && gstin ? gstin : undefined, channel: detectChannel(), website: hp.current?.value || undefined },
       });
       try {
         localStorage.setItem('gsa_player', JSON.stringify({ name, phone: digits, email }));
@@ -324,7 +324,7 @@ function DetailsSheet({
     }
   };
 
-  const sorted = [...sel].sort((a, b) => a.start - b.start || a.courtId - b.courtId);
+  const sorted = [...sel].sort((a, b) => a.start - b.start || a.spaceId - b.spaceId);
   return (
     <Sheet open={open} onClose={onClose} title="Your details">
       <form onSubmit={submit} className="space-y-4">
@@ -332,8 +332,8 @@ function DetailsSheet({
           <div className="text-xs text-muted">{fmtDate(date)}</div>
           <ul className="mt-2 space-y-1.5">
             {sorted.map((s) => (
-              <li key={`${s.courtId}:${s.start}`} className="flex justify-between text-sm">
-                <span>{s.courtName} · {fmtTime(s.start)}–{fmtTime(s.end)}</span>
+              <li key={`${s.spaceId}:${s.start}`} className="flex justify-between text-sm">
+                <span>{s.spaceName} · {fmtTime(s.start)}–{fmtTime(s.end)}</span>
                 <span className="text-soft">{rupees(s.price)}</span>
               </li>
             ))}
@@ -365,7 +365,7 @@ function DetailsSheet({
         <input ref={hp} name="website" tabIndex={-1} autoComplete="off" className="hidden" aria-hidden="true" />
         {err && <p role="alert" className="text-sm text-bad">{err}</p>}
         <button type="submit" disabled={busy} className="btn-lime w-full rounded-2xl py-4 font-bold text-base flex items-center justify-center gap-2">
-          {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : null} Hold my court & pay {rupees(total)}
+          {busy ? <Loader2 className="w-5 h-5 animate-spin" /> : null} Hold my space & pay {rupees(total)}
         </button>
         <p className="text-center text-xs text-muted">Your slots are held for {config.booking.holdMinutes} minutes while you pay.</p>
       </form>

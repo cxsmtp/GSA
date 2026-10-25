@@ -9,7 +9,7 @@ import { Btn, Card, Empty, fileToDataUrl, Spinner, staff, useAction, useStaff } 
 interface Person { id: number; name: string; role: string; bio: string; highlights: string; photo_media: string | null; sort: number; visible: number }
 interface About { headline: string; story: string; highlights: string[] }
 
-/** The public About page: story, highlights, coaches and key people. Admin and coach can edit. */
+/** The public About page: story, highlights, managers and key people. Admin and manager can edit. */
 export function AboutTab() {
   const { data, loading, reload } = useStaff<{ people: Person[]; about: About }>('people');
   const [edit, setEdit] = useState<Person | 'new' | null>(null);
@@ -18,8 +18,8 @@ export function AboutTab() {
   return (
     <div className="space-y-4">
       <AboutText about={data.about} />
-      <Card title="Coaches & key people" action={<Btn tone="lime" onClick={() => setEdit('new')}><Plus className="w-4 h-4" /> Add</Btn>}>
-        {data.people.length === 0 ? <Empty>Add your head coach, coaches, owners and staff.</Empty> : (
+      <Card title="Managers & key people" action={<Btn tone="lime" onClick={() => setEdit('new')}><Plus className="w-4 h-4" /> Add</Btn>}>
+        {data.people.length === 0 ? <Empty>Add your manager, managers, owners and staff.</Empty> : (
           <ul className="grid gap-2 sm:grid-cols-2">
             {data.people.map((p) => (
               <li key={p.id}>
@@ -51,7 +51,7 @@ function AboutText({ about }: { about: About }) {
   const [story, setStory] = useState(about.story);
   const [hl, setHl] = useState(about.highlights.join('\n'));
   return (
-    <Card title="Academy story">
+    <Card title="Business story">
       <div className="space-y-3">
         <Field label="Headline"><input className={inputCls} value={headline} onChange={(e) => setHeadline(e.target.value)} maxLength={100} /></Field>
         <Field label="Story"><textarea className={`${inputCls} min-h-28`} value={story} onChange={(e) => setStory(e.target.value)} maxLength={3000} /></Field>
@@ -73,7 +73,7 @@ function PersonSheet({ person, onClose, onDone }: { person: Person | 'new' | nul
 
 function PersonForm({ p, onDone }: { p: Person | null; onDone: () => void }) {
   const { busy, run } = useAction();
-  const [f, setF] = useState({ name: p?.name ?? '', role: p?.role ?? 'Head Coach', bio: p?.bio ?? '', highlights: p?.highlights ?? '', sort: String(p?.sort ?? 0), visible: p ? p.visible === 1 : true });
+  const [f, setF] = useState({ name: p?.name ?? '', role: p?.role ?? 'Head Manager', bio: p?.bio ?? '', highlights: p?.highlights ?? '', sort: String(p?.sort ?? 0), visible: p ? p.visible === 1 : true });
   const [photo, setPhoto] = useState<string | null>(null);
   const set = (k: 'name' | 'role' | 'bio' | 'highlights' | 'sort') => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setF({ ...f, [k]: e.target.value });
   const save = async (e: React.FormEvent) => {
@@ -90,9 +90,9 @@ function PersonForm({ p, onDone }: { p: Person | null; onDone: () => void }) {
         <input type="file" accept="image/*" className="sr-only" onChange={async (e) => { const file = e.target.files?.[0]; if (file) setPhoto(await fileToDataUrl(file, 1200)); }} />
       </label>
       <Field label="Name"><input className={inputCls} value={f.name} onChange={set('name')} required maxLength={80} /></Field>
-      <Field label="Role"><input className={inputCls} value={f.role} onChange={set('role')} maxLength={80} placeholder="Head Coach, Founder, Manager…" /></Field>
+      <Field label="Role"><input className={inputCls} value={f.role} onChange={set('role')} maxLength={80} placeholder="Head Manager, Founder, Manager…" /></Field>
       <Field label="About them"><textarea className={`${inputCls} min-h-24`} value={f.bio} onChange={set('bio')} maxLength={1500} /></Field>
-      <Field label="Achievements (one per line)"><textarea className={`${inputCls} min-h-20`} value={f.highlights} onChange={set('highlights')} maxLength={1000} placeholder={'State champion 2019\nBWF Level 1 coach'} /></Field>
+      <Field label="Achievements (one per line)"><textarea className={`${inputCls} min-h-20`} value={f.highlights} onChange={set('highlights')} maxLength={1000} placeholder={'State champion 2019\nBWF Level 1 manager'} /></Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Order"><input className={inputCls} value={f.sort} onChange={set('sort')} inputMode="numeric" /></Field>
         <label className="flex items-center gap-2 text-sm mt-7"><input type="checkbox" className="accent-lime w-5 h-5" checked={f.visible} onChange={(e) => setF({ ...f, visible: e.target.checked })} /> Show on site</label>

@@ -1,4 +1,4 @@
-# GSA badminton portal on one Hostinger KVM VPS.
+# Production on one VPS.
 #   app    the portal (Next.js); everything it stores is in the gsa-data volume
 #   caddy  HTTPS with free automatic Let's Encrypt certificates, HTTP → HTTPS
 #

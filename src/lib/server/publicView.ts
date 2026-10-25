@@ -21,11 +21,11 @@ export async function startup() {
 }
 
 export function publicConfig(): PublicConfig {
-  const a = getSettings('academy');
+  const a = getSettings('business');
   const b = getSettings('booking');
   const g = getSettings('gst');
   return {
-    academy: { name: a.name, tagline: a.tagline, city: a.city, phone: a.phone, whatsapp: a.whatsapp, address: a.address, mapUrl: a.mapUrl, email: a.email, instagram: a.instagram },
+    business: { name: a.name, tagline: a.tagline, city: a.city, phone: a.phone, whatsapp: a.whatsapp, address: a.address, mapUrl: a.mapUrl, email: a.email, instagram: a.instagram },
     booking: { daysAhead: b.daysAhead, maxSlots: b.maxSlots, holdMinutes: b.holdMinutes, slotMinutes: b.slotMinutes },
     gst: { mode: g.mode, ratePct: g.ratePct, pricesIncludeGst: g.pricesIncludeGst },
     pay: { upi: b.upiEnabled && Boolean(a.upiVpa), razorpay: razorpayOn() },
@@ -39,7 +39,7 @@ export type PublicBooking = ReturnType<typeof publicBooking>;
 export function publicBooking(b: BookingRow) {
   sweepExpired();
   const fresh = get<BookingRow>('SELECT * FROM bookings WHERE id = ?', b.id) ?? b;
-  const a = getSettings('academy');
+  const a = getSettings('business');
   const bk = getSettings('booking');
   const slots = slotsOf(fresh);
   const pending = get<{ reference: string; method: string }>("SELECT reference, method FROM payments WHERE booking_id = ? AND status = 'pending' AND reference <> '' ORDER BY id DESC LIMIT 1", fresh.id);
@@ -52,7 +52,7 @@ export function publicBooking(b: BookingRow) {
     dateLabel: fmtDate(fresh.date),
     name: fresh.name,
     phoneLast4: fresh.phone.slice(-4),
-    slots: slots.map((s) => ({ court: s.courtName, start: s.start, end: s.end, price: s.price })),
+    slots: slots.map((s) => ({ space: s.spaceName, start: s.start, end: s.end, price: s.price })),
     slotsLabel: slotsLabel(slots),
     base: fresh.base_paise,
     amount: fresh.amount_paise,
@@ -70,6 +70,6 @@ export function publicBooking(b: BookingRow) {
     whatsappConfirm: waMeLink(a.whatsapp, playerConfirmMessage(fresh.ref, fresh.confirm_code)),
     waAuto: integrations().whatsappApi,
     invoice: invoice ? { token: invoice.token, number: invoice.number } : null,
-    academy: { name: a.name, phone: a.phone, whatsapp: a.whatsapp, mapUrl: a.mapUrl, address: a.address },
+    business: { name: a.name, phone: a.phone, whatsapp: a.whatsapp, mapUrl: a.mapUrl, address: a.address },
   };
 }

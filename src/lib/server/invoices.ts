@@ -67,7 +67,7 @@ export interface Seller {
 }
 
 function sellerNow(): Seller {
-  const a = getSettings('academy');
+  const a = getSettings('business');
   const g = getSettings('gst');
   return {
     name: a.name, legalName: g.legalName || a.name, address: a.address, city: a.city, state: a.state, stateCode: a.stateCode,
@@ -97,7 +97,8 @@ export interface IssueInput {
 export function issueInvoice(input: IssueInput): InvoiceRow {
   const g = getSettings('gst');
   const seller = sellerNow();
-  if (g.mode === 'regular' && !g.gstin) throw new HttpError(400, 'Add the academy GSTIN in Settings → GST before issuing tax invoices.');
+  if (g.mode === 'regular' && !g.gstin) throw new HttpError(400, 'Add the business GSTIN in Settings → GST before issuing tax invoices.');
+  if (g.mode === 'regular' && !seller.stateCode) throw new HttpError(400, 'Choose the business state in Settings → Business before issuing tax invoices.');
   const date = input.date || todayIst();
   const fy = financialYear(date);
   const pos = input.placeOfSupply && STATES[input.placeOfSupply] ? input.placeOfSupply : seller.stateCode;
@@ -139,7 +140,7 @@ export function invoiceForBooking(bookingId: number, actor: string): InvoiceRow 
     customerName: b.name,
     customerPhone: b.phone,
     customerGstin: b.gstin,
-    items: [{ description: `Badminton court hire — ${fmtDate(b.date)} — ${slotsLabel(slots)} (Booking ${b.ref})`, sac: g.sac, qty: slots.length, amount: b.base_paise }],
+    items: [{ description: `Booking — ${fmtDate(b.date)} — ${slotsLabel(slots)} (Ref ${b.ref})`, sac: g.sac, qty: slots.length, amount: b.base_paise }],
     actor,
   });
 }

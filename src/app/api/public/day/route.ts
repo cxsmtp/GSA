@@ -8,7 +8,7 @@ import { isValidDate, todayIst } from '@/lib/shared/time';
 
 export const dynamic = 'force-dynamic';
 
-/** GET /api/public/day?date=YYYY-MM-DD → the court grid; &strip=1 adds free-slot counts for the date strip. */
+/** GET /api/public/day?date=YYYY-MM-DD → the space grid; &strip=1 adds free-slot counts for the date strip. */
 export async function GET(req: Request) {
   try {
     await startup();

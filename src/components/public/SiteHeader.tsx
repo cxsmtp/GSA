@@ -1,17 +1,17 @@
 import Link from 'next/link';
 import { getSettings } from '@/lib/server/settings';
-import { InstagramIcon, Shuttle, WhatsAppIcon } from '@/components/ui/BrandIcons';
+import { InstagramIcon, LogoMark, WhatsAppIcon } from '@/components/ui/BrandIcons';
 import { PublicNav } from './PublicNav';
 
 export function SiteHeader() {
-  const a = getSettings('academy');
+  const a = getSettings('business');
   return (
     <header className="sticky top-0 z-30 glass border-x-0 border-t-0">
       <div className="mx-auto max-w-5xl flex items-center gap-3 px-4 h-14">
         <Link href="/" className="flex items-center gap-2 min-w-0">
           <span className="grid place-items-center w-9 h-9 rounded-xl bg-gradient-to-br from-violet to-cyan p-[1.5px]">
             <span className="grid place-items-center w-full h-full rounded-[10px] bg-ink text-text">
-              <Shuttle className="w-6 h-6" />
+              <LogoMark className="w-6 h-6" />
             </span>
           </span>
           <span className="font-display font-bold text-sm sm:text-base truncate">{a.name}</span>

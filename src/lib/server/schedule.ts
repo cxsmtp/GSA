@@ -1,15 +1,15 @@
-import type { Cell, CourtDay, DayGrid } from '@/lib/shared/types';
+import type { Cell, SpaceDay, DayGrid } from '@/lib/shared/types';
 import { addDays, minutesNowIst, todayIst, weekday } from '@/lib/shared/time';
 import { all } from './db';
 import { getSettings } from './settings';
 
 /**
- * The court timetable for one day: every slot of every active court with its state and price,
- * built from the opening hours, the admin's blocks (coaching batches, maintenance, events) and the
- * bookings that hold a court. Staff see who holds each slot; the public sees only free/taken.
+ * The space timetable for one day: every slot of every active space with its state and price,
+ * built from the opening hours, the admin's blocks (training batches, maintenance, events) and the
+ * bookings that hold a space. Staff see who holds each slot; the public sees only free/taken.
  */
 
-export interface CourtRow {
+export interface SpaceRow {
   id: number;
   name: string;
   note: string;
@@ -20,7 +20,7 @@ export interface CourtRow {
 export interface PriceRule {
   id: number;
   name: string;
-  court_id: number | null;
+  space_id: number | null;
   days: string;
   start_min: number;
   end_min: number;
@@ -31,7 +31,7 @@ export interface PriceRule {
 
 export interface BlockRow {
   id: number;
-  court_id: number | null;
+  space_id: number | null;
   date_from: string;
   date_to: string;
   days: string;
@@ -41,8 +41,8 @@ export interface BlockRow {
   reason: string;
 }
 
-export function activeCourts(): CourtRow[] {
-  return all<CourtRow>('SELECT * FROM courts WHERE active = 1 ORDER BY sort, id');
+export function activeSpaces(): SpaceRow[] {
+  return all<SpaceRow>('SELECT * FROM spaces WHERE active = 1 ORDER BY sort, id');
 }
 
 export function priceRules(): PriceRule[] {
@@ -50,10 +50,10 @@ export function priceRules(): PriceRule[] {
 }
 
 /** The price of one slot: the highest-priority matching rule, or the base price. */
-export function slotPrice(rules: PriceRule[], courtId: number, date: string, start: number, base: number): number {
+export function slotPrice(rules: PriceRule[], spaceId: number, date: string, start: number, base: number): number {
   const day = String(weekday(date));
   for (const r of rules) {
-    if (r.court_id !== null && r.court_id !== courtId) continue;
+    if (r.space_id !== null && r.space_id !== spaceId) continue;
     if (!r.days.includes(day)) continue;
     if (start >= r.start_min && start < r.end_min) return r.price_paise;
   }
@@ -76,7 +76,7 @@ export function blocksOn(date: string): BlockRow[] {
 }
 
 interface HeldSlot {
-  court_id: number;
+  space_id: number;
   start_min: number;
   end_min: number;
   booking_id: number;
@@ -94,20 +94,20 @@ export function inBookingWindow(date: string, now = Date.now()): boolean {
 
 export function buildDay(date: string, { staff = false, now = Date.now() }: { staff?: boolean; now?: number } = {}): DayGrid {
   const b = getSettings('booking');
-  const courts = activeCourts();
+  const spaces = activeSpaces();
   const starts = slotStarts(date);
   const rules = priceRules();
   const blocks = blocksOn(date);
   const held = all<HeldSlot>(
-    `SELECT s.court_id, s.start_min, s.end_min, s.booking_id, k.status, k.name, k.ref, k.source
+    `SELECT s.space_id, s.start_min, s.end_min, s.booking_id, k.status, k.name, k.ref, k.source
        FROM booking_slots s JOIN bookings k ON k.id = s.booking_id WHERE s.date = ?`,
     date,
   );
-  const heldMap = new Map(held.map((h) => [`${h.court_id}:${h.start_min}`, h]));
+  const heldMap = new Map(held.map((h) => [`${h.space_id}:${h.start_min}`, h]));
   const today = todayIst(now);
   const cutoff = date < today ? Infinity : date === today ? minutesNowIst(now) + b.minLeadMinutes : -Infinity;
 
-  const out: CourtDay[] = courts.map((c) => ({
+  const out: SpaceDay[] = spaces.map((c) => ({
     id: c.id,
     name: c.name,
     note: c.note,
@@ -121,13 +121,13 @@ export function buildDay(date: string, { staff = false, now = Date.now() }: { st
           ? { start, end, state, price, label: `${h.name} · ${h.ref}`, bookingId: h.booking_id, kind: h.status }
           : { start, end, state: 'booked', price };
       }
-      const blk = blocks.find((x) => (x.court_id === null || x.court_id === c.id) && start < x.end_min && end > x.start_min);
+      const blk = blocks.find((x) => (x.space_id === null || x.space_id === c.id) && start < x.end_min && end > x.start_min);
       if (blk) return staff ? { start, end, state: 'blocked', price, label: blk.reason || blk.kind, kind: blk.kind } : { start, end, state: 'blocked', price, kind: blk.kind };
       if (start < cutoff) return { start, end, state: 'past', price };
       return { start, end, state: 'free', price };
     }),
   }));
-  return { date, open: starts.length > 0, slotMinutes: b.slotMinutes, courts: out };
+  return { date, open: starts.length > 0, slotMinutes: b.slotMinutes, spaces: out };
 }
 
 /** Free-slot counts for the date strip (public). */
@@ -135,7 +135,7 @@ export function freeCounts(from: string, days: number, now = Date.now()): Record
   const out: Record<string, number> = {};
   for (let i = 0; i < days; i++) {
     const d = addDays(from, i);
-    out[d] = buildDay(d, { now }).courts.reduce((n, c) => n + c.cells.filter((x) => x.state === 'free').length, 0);
+    out[d] = buildDay(d, { now }).spaces.reduce((n, c) => n + c.cells.filter((x) => x.state === 'free').length, 0);
   }
   return out;
 }

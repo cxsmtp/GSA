@@ -41,6 +41,6 @@ export function passwordProblem(pw: string): string | null {
   if (pw.length < 10) return 'Use at least 10 characters.';
   if (pw.length > 200) return 'Use at most 200 characters.';
   if (new Set(pw).size < 5) return 'Use at least 5 different characters.';
-  if (/^(password|badminton|qwerty|123456)/i.test(pw)) return 'That password is too easy to guess.';
+  if (/^(password|qwerty|123456)/i.test(pw)) return 'That password is too easy to guess.';
   return null;
 }

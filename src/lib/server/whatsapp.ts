@@ -14,12 +14,12 @@ import { appUrl, getSettings, integrations } from './settings';
  * Automatic (optional): with WHATSAPP_TOKEN and WHATSAPP_PHONE_NUMBER_ID (Meta WhatsApp Cloud API)
  * the server sends an approved template the moment a booking is confirmed. The template
  * (WHATSAPP_TEMPLATE, default "booking_confirmed") takes five body values in this order:
- * {{1}} name, {{2}} booking ref, {{3}} date, {{4}} court & time, {{5}} amount paid.
+ * {{1}} name, {{2}} booking ref, {{3}} date, {{4}} space & time, {{5}} amount paid.
  */
 
 /**
- * Paid, being verified, or due — and how much is still due. Shown to admin and coach alike. Money the
- * coach noted at the desk, or a UPI reference the player typed, counts as "being verified" until the admin
+ * Paid, being verified, or due — and how much is still due. Shown to admin and manager alike. Money the
+ * manager noted at the desk, or a UPI reference the player typed, counts as "being verified" until the admin
  * checks it (an unfinished Razorpay checkout does not count).
  */
 export function payStateOf(b: BookingRow): { payState: PayState; due: number } {
@@ -37,12 +37,12 @@ export function payStateOf(b: BookingRow): { payState: PayState; due: number } {
 }
 
 export function confirmationText(b: BookingRow, base = ''): string {
-  const a = getSettings('academy');
+  const a = getSettings('business');
   const { payState, due } = payStateOf(b);
-  return bookingConfirmedMessage({ ...bookingFacts(b), amount: rupees(b.amount_paise), due: rupees(due), payState, academy: a.name, link: base ? `${base}/pay/${b.token}` : undefined });
+  return bookingConfirmedMessage({ ...bookingFacts(b), amount: rupees(b.amount_paise), due: rupees(due), payState, business: a.name, note: a.messageNote, link: base ? `${base}/pay/${b.token}` : undefined });
 }
 
-/** The one-tap link (admin or coach) to send the booking confirmation from their own WhatsApp, for any live booking. */
+/** The one-tap link (admin or manager) to send the booking confirmation from their own WhatsApp, for any live booking. */
 export function deskConfirmLink(b: BookingRow, base = ''): string | null {
   if (!['held', 'reserved', 'submitted', 'confirmed'].includes(b.status)) return null;
   return waMeLink(b.phone, confirmationText(b, base));

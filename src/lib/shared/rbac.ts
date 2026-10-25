@@ -4,11 +4,11 @@
  * Shared by server and browser so both read the same table.
  *
  *   admin        everything, including money, bill book, settings and team
- *   coach        head coach: runs the courts day to day; cash he and his juniors collect is on his name
- *   junior       junior coach: helps with reservations — sees the timetable, books, sends WhatsApp
- *                confirmations, takes cash (on the head coach's name); changes nothing else
+ *   manager        manager: runs the spaces day to day; cash he and his assistants collect is on his name
+ *   assistant       assistant: helps with reservations — sees the timetable, books, sends WhatsApp
+ *                confirmations, takes cash (on the manager's name); changes nothing else
  */
-export const ROLES = ['admin', 'coach', 'junior'] as const;
+export const ROLES = ['admin', 'manager', 'assistant'] as const;
 export type Role = (typeof ROLES)[number];
 
 export const PERMISSIONS = {
@@ -19,11 +19,11 @@ export const PERMISSIONS = {
   'cash.collect': 'Take cash / UPI at the desk',
   'bookings.edit': 'Edit booking notes',
   'bookings.cancel': 'Cancel unpaid bookings',
-  'schedule.manage': 'Block courts (batches, events)',
+  'schedule.manage': 'Block spaces (batches, events)',
   'about.manage': 'Edit the About page',
   'cash.custody': 'Hold cash on own name & deposit it',
   money: 'Payments, bill book, expenses, reports',
-  settings: 'Courts, prices, hours, settings',
+  settings: 'Spaces, prices, hours, settings',
   team: 'Add & manage staff',
 } as const;
 export type Permission = keyof typeof PERMISSIONS;
@@ -32,11 +32,11 @@ const ALL = Object.keys(PERMISSIONS) as Permission[];
 
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
   admin: ALL,
-  coach: ['account', 'bookings.view', 'bookings.create', 'bookings.notify', 'cash.collect', 'bookings.edit', 'bookings.cancel', 'schedule.manage', 'about.manage', 'cash.custody'],
-  junior: ['account', 'bookings.view', 'bookings.create', 'bookings.notify', 'cash.collect'],
+  manager: ['account', 'bookings.view', 'bookings.create', 'bookings.notify', 'cash.collect', 'bookings.edit', 'bookings.cancel', 'schedule.manage', 'about.manage', 'cash.custody'],
+  assistant: ['account', 'bookings.view', 'bookings.create', 'bookings.notify', 'cash.collect'],
 };
 
-export const ROLE_LABEL: Record<Role, string> = { admin: 'Admin', coach: 'Head coach', junior: 'Junior coach' };
+export const ROLE_LABEL: Record<Role, string> = { admin: 'Admin', manager: 'Manager', assistant: 'Assistant' };
 
 export function can(role: Role | undefined | null, perm: Permission): boolean {
   return Boolean(role && ROLE_PERMISSIONS[role]?.includes(perm));

@@ -6,7 +6,7 @@ import { HttpError } from './http';
 import { randomToken } from './secrets';
 
 /**
- * Uploaded files (coach photos: public; expense bills: admin only). The type is decided from the
+ * Uploaded files (manager photos: public; expense bills: admin only). The type is decided from the
  * file's own first bytes, never from its name or the browser's word, and only images and PDFs are
  * kept. Files live in DATA_DIR/media under random names.
  */

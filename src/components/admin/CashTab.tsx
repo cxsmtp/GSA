@@ -18,8 +18,8 @@ type CashData =
   | { view: 'collector'; custodian: string; custodianName: string; collections: Collection[]; total: number };
 
 /**
- * Cash custody. Junior coach: what they took, and whose name it is on. Head coach: cash on their name
- * (theirs and their juniors'), and recording a deposit. Admin (inside Money): every custodian's
+ * Cash custody. Assistant: what they took, and whose name it is on. Manager: cash on their name
+ * (theirs and their assistants'), and recording a deposit. Admin (inside Money): every custodian's
  * balance and the deposits to confirm.
  */
 export function CashTab() {
@@ -99,7 +99,7 @@ function CustodianView({ d, reload }: { d: Extract<CashData, { view: 'custodian'
         <Stat label="Collected (all time)" value={rupees(b?.collected ?? 0)} />
         <Stat label="Deposited" value={rupees(b?.deposited ?? 0)} tone="text-ok" />
       </div>
-      <p className="text-sm text-soft">All cash taken by you and the junior coaches who report to you is on your name until you deposit it in the academy bank account or hand it to the admin, and the admin confirms.</p>
+      <p className="text-sm text-soft">All cash taken by you and the assistants who report to you is on your name until you deposit it in the business bank account or hand it to the admin, and the admin confirms.</p>
       <Btn tone="lime" className="w-full py-3.5" disabled={free <= 0} onClick={() => setOpen(true)}><Landmark className="w-4 h-4" /> Record a deposit{free > 0 ? ` (up to ${rupees(free)})` : ''}</Btn>
       <Card title="Deposits"><DepositList rows={d.deposits} /></Card>
       <Card title="Cash collected (30 days)"><CollectionList rows={d.collections} showCustodian /></Card>
