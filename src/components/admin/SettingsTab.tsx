@@ -16,7 +16,7 @@ interface S {
   business: Record<string, string>;
   booking: { upiEnabled: boolean; razorpayEnabled: boolean };
   gst: { mode: string; gstin: string; legalName: string; ratePct: number; sac: string; pricesIncludeGst: boolean; invoicePrefix: string; thresholdPaise: number; terms: string };
-  integrations: { razorpay: boolean; razorpayWebhook: boolean; whatsappApi: boolean };
+  integrations: { razorpay: boolean; razorpayWebhook: boolean };
 }
 
 export function SettingsTab() {
@@ -48,7 +48,7 @@ function BusinessForm({ a, reload }: { a: Record<string, string>; reload: () => 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value });
   const fields: [string, string, string?][] = [
     ['name', 'Business name'], ['tagline', 'Tagline'], ['address', 'Address'], ['city', 'City'], ['pincode', 'PIN code'],
-    ['phone', 'Phone (shown on site & invoices)'], ['whatsapp', 'WhatsApp number (receives player confirmations)', '10-digit mobile'], ['email', 'Email'],
+    ['phone', 'Phone (shown on site & invoices)'], ['whatsapp', 'Manager’s WhatsApp number (players message it after booking)', '10-digit mobile'], ['email', 'Email'],
     ['mapUrl', 'Google Maps link', 'https://maps.app.goo.gl/…'], ['instagram', 'Instagram username', 'yourbusiness'], ['messageNote', 'Last line of WhatsApp confirmations', 'e.g. arrival instructions'],
   ];
   return (
@@ -90,10 +90,12 @@ function Payments({ s, reload }: { s: S; reload: () => void }) {
         <label className="mt-2 flex items-center gap-2 text-sm"><input type="checkbox" className="accent-lime w-5 h-5" disabled={!s.integrations.razorpay} checked={s.booking.razorpayEnabled} onChange={(e) => run(() => staff('settings/booking', 'PUT', { razorpayEnabled: e.target.checked }), 'Saved').then(reload)} /> Show “Pay instantly”</label>
         <p className="text-[11px] text-muted mt-2">Set RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET and RAZORPAY_WEBHOOK_SECRET on the server (never here — secrets stay out of the database). Webhook URL: <code>/api/webhooks/razorpay</code>, events payment.captured & order.paid.</p>
       </Card>
-      <Card title="WhatsApp confirmations">
-        <Status on={s.integrations.whatsappApi} label="Automatic (WhatsApp Cloud API)" />
-        <p className="text-sm text-soft mt-2">{s.integrations.whatsappApi ? 'Confirmed bookings are messaged automatically from your business number.' : 'Free mode: after you verify a payment, one tap opens your WhatsApp with the confirmation to the player already typed.'}</p>
-        <p className="text-[11px] text-muted mt-2">To automate: set WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID and an approved template (WHATSAPP_TEMPLATE) on the server — see the deployment guide.</p>
+      <Card title="WhatsApp (phone-native, free)">
+        <ul className="text-sm text-soft space-y-1.5 list-disc pl-5">
+          <li>A player who books and pays online gets <b>Send on WhatsApp</b>: their own WhatsApp opens with “I&apos;m booked” — name, ref, date, time and UPI reference — to the manager&apos;s number (Business → WhatsApp number).</li>
+          <li>For phone bookings, the manager or assistant taps <b>Send confirmation on WhatsApp</b> to message the player.</li>
+          <li>No WhatsApp API, no fees, nothing sent automatically.</li>
+        </ul>
       </Card>
     </div>
   );

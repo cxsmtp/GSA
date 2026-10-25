@@ -73,6 +73,7 @@ export function PayApp({ initial }: { initial: PublicBooking }) {
   return (
     <div className="mx-auto max-w-xl px-4 pt-6 pb-36 space-y-4">
       <StatusHero b={b} timer={b.status === 'held' ? `${mm}:${String(ss).padStart(2, '0')}` : ''} />
+      {b.tellManager && <TellManager b={b} />}
       <Summary b={b} />
 
       {(b.status === 'held' || b.status === 'expired' || b.status === 'reserved') && (
@@ -86,8 +87,6 @@ export function PayApp({ initial }: { initial: PublicBooking }) {
           {b.upi && <UtrForm b={b} onDone={setB} />}
         </>
       )}
-
-      {!b.phoneBooking && (b.status === 'submitted' || b.status === 'confirmed' || b.status === 'held') && b.whatsappConfirm && <WhatsAppBlock b={b} />}
 
       {['confirmed', 'reserved', 'submitted'].includes(b.status) && <ConfirmedActions b={b} />}
 
@@ -317,21 +316,19 @@ function UtrForm({ b, onDone }: { b: PublicBooking; onDone: (b: PublicBooking) =
   );
 }
 
-function WhatsAppBlock({ b }: { b: PublicBooking }) {
-  const tap = () => void api(`/api/public/bookings/${b.token}`, { body: { action: 'wa_opened' } }).catch(() => {});
-  if (b.status === 'confirmed' && b.waAuto) {
-    return <p className="flex items-center justify-center gap-2 rounded-2xl border border-ok/30 bg-ok/10 py-3 text-sm font-semibold text-ok"><WhatsAppIcon className="w-4 h-4" /> Confirmation sent to your WhatsApp ••{b.phoneLast4}</p>;
-  }
+/** Booked and paid: one tap opens the player's own WhatsApp with "I'm booked …" to the manager. */
+function TellManager({ b }: { b: PublicBooking }) {
+  const [sent, setSent] = useState(b.toldManager);
+  const tap = () => {
+    setSent(true);
+    void api(`/api/public/bookings/${b.token}`, { body: { action: 'wa_opened' } }).catch(() => {});
+  };
   return (
-    <section className="rounded-3xl border border-ok/30 bg-ok/[0.07] p-5 space-y-3">
-      <h2 className="font-display text-base font-bold flex items-center gap-2"><WhatsAppIcon className="w-5 h-5 text-ok" /> {b.status === 'confirmed' ? 'Get it on WhatsApp' : 'Confirm on WhatsApp'}</h2>
-      <p className="text-xs text-soft">
-        {b.status === 'confirmed'
-          ? 'Tap to message us — we reply with your confirmation and invoice link on WhatsApp.'
-          : 'Tap and press Send. It tells us this number is yours, and we send your confirmation back on WhatsApp the moment payment is verified.'}
-      </p>
-      <a href={b.whatsappConfirm!} onClick={tap} target="_blank" rel="noopener noreferrer" className="flex items-center justify-center gap-2 w-full rounded-2xl py-3.5 font-bold bg-[#25D366] text-ink">
-        <WhatsAppIcon className="w-5 h-5" /> Open WhatsApp
+    <section className="rounded-3xl border border-ok/30 bg-ok/[0.07] p-5 space-y-3 rise">
+      <h2 className="font-display text-base font-bold flex items-center gap-2"><WhatsAppIcon className="w-5 h-5 text-ok" /> Tell the manager you&apos;re booked</h2>
+      <p className="text-xs text-soft">Opens your WhatsApp with your booking and payment already typed — just tap Send.</p>
+      <a href={b.tellManager!} onClick={tap} target="_blank" rel="noopener noreferrer" className={`flex items-center justify-center gap-2 w-full rounded-2xl py-4 font-bold ${sent ? 'border border-ok/40 text-ok' : 'bg-[#25D366] text-ink'}`}>
+        <WhatsAppIcon className="w-5 h-5" /> {sent ? 'Sent? Open WhatsApp again' : 'Send on WhatsApp'}
       </a>
     </section>
   );

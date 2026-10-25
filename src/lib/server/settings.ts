@@ -135,7 +135,6 @@ export function integrations() {
   return {
     razorpay: Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET),
     razorpayWebhook: Boolean(process.env.RAZORPAY_WEBHOOK_SECRET),
-    whatsappApi: Boolean(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_NUMBER_ID),
   };
 }
 

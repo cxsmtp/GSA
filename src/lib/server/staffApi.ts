@@ -15,7 +15,7 @@ import { allowFields, bool, HttpError, int, oneOf, readJsonBody, str } from './h
 import { cancelInvoice, issueInvoice, listInvoices, type InvoiceItem } from './invoices';
 import { readMedia, saveDataUrl } from './media';
 import { generatePassword, hashPassword, passwordProblem, verifyPassword } from './password';
-import { confirmPaidBooking, paidTotal, paymentsForBooking, recordPayment, rejectPayment, verifyPayment, type PaymentRow } from './payments';
+import { confirmPaidBooking, paidTotal, paymentsForBooking, reconcilePayment, recordPayment, rejectPayment, verifyPayment, type PaymentRow } from './payments';
 import { buildDay } from './schedule';
 import { appUrl, DEFAULTS, getSettings, integrations, saveSettings, type SettingsGroup } from './settings';
 import { encrypt, randomToken } from './secrets';
@@ -49,6 +49,9 @@ interface Route {
 }
 
 const routes: Route[] = [];
+
+/** Payments for the admin to check: unticked UPI (bookings already confirmed) and anything still pending. */
+const TO_CHECK = "((p.status = 'pending' AND p.direction = 'in' AND (p.method <> 'razorpay' OR p.reference <> '')) OR (p.status = 'verified' AND p.direction = 'in' AND p.method = 'upi' AND p.reconciled_at IS NULL))";
 function route(method: Route['method'], path: string, perm: Permission, h: Handler, opts: Partial<Route> = {}) {
   routes.push({ method, path, perm, h, ...opts });
 }
@@ -145,7 +148,7 @@ route('GET', 'dashboard', 'bookings.view', (c) => {
   const admin = can(c.user.role, 'money');
   const todays = all<BookingRow>("SELECT * FROM bookings WHERE date = ? AND status IN ('reserved','submitted','confirmed','held') ORDER BY id", today);
   const firstStart = (b: BookingRow) => Math.min(...slotsOf(b).map((s) => s.start));
-  const pendingPayments = admin ? all<{ n: number }>("SELECT COUNT(*) AS n FROM payments WHERE status='pending' AND direction='in' AND (method <> 'razorpay' OR reference <> '')")[0].n : undefined;
+  const pendingPayments = admin ? all<{ n: number }>(`SELECT COUNT(*) AS n FROM payments p WHERE ${TO_CHECK}`)[0].n : undefined;
   const collectedToday = admin ? get<{ n: number | null }>("SELECT SUM(CASE direction WHEN 'in' THEN amount_paise ELSE -amount_paise END) AS n FROM payments WHERE status='verified' AND date = ?", today)?.n ?? 0 : undefined;
   const upcoming = get<{ n: number }>("SELECT COUNT(*) AS n FROM bookings WHERE date > ? AND status IN ('reserved','submitted','confirmed')", today)!.n;
   const grid = buildDay(today, { staff: true });
@@ -218,8 +221,8 @@ route('GET', 'bookings/:id', 'bookings.view', (c) => {
  * Money taken at the desk.
  * Cash: the booking is paid at once and the cash goes on its custodian's name — the manager who
  * collected it, or the manager a assistant reports to (src/lib/server/cash.ts) — until deposited.
- * UPI / card / bank: confirmed at once when the admin takes it; from a manager it waits for the admin to
- * see it in the bank account (Money → Verify).
+ * UPI / card / bank: the booking is confirmed at once too; UPI a manager or assistant took waits for
+ * the admin's tick against the bank (Money → To check), like a player's own UPI.
  */
 async function takeDeskPayment(user: SessionUser, b: BookingRow, methodRaw: unknown, reference: string, amount: number) {
   const admin = can(user.role, 'money');
@@ -234,9 +237,8 @@ async function takeDeskPayment(user: SessionUser, b: BookingRow, methodRaw: unkn
     await confirmPaidBooking(b.id, user.username);
     return;
   }
-  recordPayment({ bookingId: b.id, direction: 'in', category: 'space', method, amount, reference, date: todayIst(), note: `Taken at the desk by ${user.name}`, verified: admin, actor: user.username });
-  if (admin) await confirmPaidBooking(b.id, user.username);
-  else if (bookingById(b.id)!.status !== 'submitted') setStatus(b.id, 'submitted');
+  recordPayment({ bookingId: b.id, direction: 'in', category: 'space', method, amount, reference, date: todayIst(), note: `Taken at the desk by ${user.name}`, verified: true, reconciled: admin, actor: user.username });
+  await confirmPaidBooking(b.id, user.username);
 }
 
 route('POST', 'bookings', 'bookings.create', async (c) => {
@@ -499,8 +501,9 @@ route('GET', 'payments', 'money', (c) => {
   const status = c.query.get('status') || 'all';
   if (status === 'pending') {
     return {
-      payments: all(`SELECT p.*, b.ref, b.name, b.phone, b.date AS booking_date, b.slots_json FROM payments p LEFT JOIN bookings b ON b.id = p.booking_id
-                     WHERE p.status = 'pending' AND p.direction = 'in' AND (p.method <> 'razorpay' OR p.reference <> '') ORDER BY p.id`),
+      // UPI to tick off against the bank (bookings already confirmed), and any older payment still waiting.
+      payments: all(`SELECT p.*, b.ref, b.name, b.phone, b.date AS booking_date, b.status AS booking_status FROM payments p LEFT JOIN bookings b ON b.id = p.booking_id
+                     WHERE ${TO_CHECK} ORDER BY p.id`),
     };
   }
   const { from, to } = range(c);
@@ -511,7 +514,15 @@ route('POST', 'payments/:id/verify', 'money', async (c) => {
   await verifyPayment(idParam(c), c.user.username);
   const p = get<PaymentRow>('SELECT * FROM payments WHERE id = ?', idParam(c))!;
   const b = p.booking_id ? bookingById(p.booking_id) : undefined;
-  return { waLink: b && b.status === 'confirmed' ? deskConfirmLink(b, appUrl(c.req)) : null, waAuto: integrations().whatsappApi };
+  return { waLink: b && b.status === 'confirmed' ? deskConfirmLink(b, appUrl(c.req)) : null };
+});
+
+route('POST', 'payments/:id/reconcile', 'money', async (c) => {
+  const b = await c.body();
+  allowFields(b, ['received', 'note']);
+  const received = bool(b.received, 'received');
+  reconcilePayment(idParam(c), received, str(b.note, 'Note', 200, { required: !received }), c.user.username);
+  return {};
 });
 
 route('POST', 'payments/:id/reject', 'money', async (c) => {

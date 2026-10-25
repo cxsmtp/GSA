@@ -276,6 +276,12 @@ const MIGRATIONS: string[] = [
   );
   CREATE INDEX cash_deposits_custodian ON cash_deposits(custodian, status);
   `,
+  // 3: UPI payments confirm the booking at once; the admin ticks them off against the bank afterwards.
+  `
+  ALTER TABLE payments ADD COLUMN reconciled_at TEXT;
+  ALTER TABLE payments ADD COLUMN reconciled_by TEXT;
+  UPDATE payments SET reconciled_at = verified_at, reconciled_by = verified_by WHERE status = 'verified';
+  `,
 ];
 
 type Db = DatabaseSync;

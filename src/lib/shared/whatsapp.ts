@@ -1,9 +1,7 @@
 /**
- * WhatsApp without a paid API (the buh project's "Confirm on WhatsApp"): a wa.me link opens the
- * person's own WhatsApp with the message already typed; they only tap Send. Used both ways:
- * the player sends "Confirm my booking GSA-… · code 1234" to the business (proving the number is
- * theirs), and the desk sends the confirmation to the player's number in one tap.
- * With the WhatsApp Cloud API configured, the server also sends the confirmation by itself.
+ * WhatsApp without an API: a wa.me link opens the person's own WhatsApp with the message already
+ * typed; they only tap Send. The player tells the manager "I'm booked"; the manager sends phone
+ * bookings their confirmation.
  */
 
 /** Indian mobile → "91XXXXXXXXXX"; null when not a valid 10-digit Indian mobile. */
@@ -45,9 +43,17 @@ export interface BookingMessageFacts {
   link?: string;
 }
 
-/** What the player sends to the business. */
-export function playerConfirmMessage(ref: string, code: string): string {
-  return `Hi! Please confirm my space booking ${ref} · code ${code}`;
+/** What the player sends the manager once booked and paid. */
+export function playerBookedMessage(f: BookingMessageFacts, paidBy: string): string {
+  return [
+    `Hi! I'm booked ✅`,
+    ``,
+    `Name: ${f.name}`,
+    `Ref: ${f.ref}`,
+    `Date: ${f.dateLabel}`,
+    `Where & when: ${f.slots}`,
+    `Paid: ${f.amount}${paidBy ? ` (${paidBy})` : ''}`,
+  ].join('\n');
 }
 
 /**
@@ -76,8 +82,4 @@ export function bookingConfirmedMessage(f: BookingMessageFacts & { payState?: Pa
     ...(f.link ? [``, `${state === 'due' ? 'Your booking & payment' : 'Your booking & receipt'}: ${f.link}`] : []),
     ...(f.note ? [``, f.note] : []),
   ].join('\n');
-}
-
-export function paymentReceivedMessage(f: BookingMessageFacts): string {
-  return `We received your payment details for booking ${f.ref} (${f.dateLabel}, ${f.slots}). We'll confirm on WhatsApp as soon as it is verified. — ${f.business}`;
 }

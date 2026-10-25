@@ -20,7 +20,7 @@ export function MoneyTab() {
   return (
     <div className="space-y-4">
       <Segmented value={sub} onChange={setSub} options={[
-        { value: 'verify', label: 'Verify' }, { value: 'cash', label: 'Cash' }, { value: 'overview', label: 'Funds' }, { value: 'bills', label: 'Bill book' },
+        { value: 'verify', label: 'To check' }, { value: 'cash', label: 'Cash' }, { value: 'overview', label: 'Funds' }, { value: 'bills', label: 'Bill book' },
         { value: 'expenses', label: 'Expenses' }, { value: 'income', label: 'Income' }, { value: 'gst', label: 'GST & exports' },
       ]} />
       {sub === 'verify' && <VerifyQueue />}
@@ -36,63 +36,65 @@ export function MoneyTab() {
 
 /* ---------------- verify ---------------- */
 
-interface Pending { id: number; method: string; amount_paise: number; reference: string; created_at: string; created_by: string; ref: string | null; name: string | null; phone: string | null; booking_date: string | null; note: string }
+interface Pending { id: number; method: string; status: string; amount_paise: number; reference: string; created_at: string; created_by: string; ref: string | null; name: string | null; phone: string | null; booking_date: string | null; booking_status: string | null; note: string }
 
+/**
+ * To check. UPI payments already confirmed their bookings (players never wait); here the admin ticks
+ * each one off against the bank app. "Not received" cancels the booking and its invoice. Older
+ * payments still pending (from before) get Verify / Reject.
+ */
 function VerifyQueue() {
   const { data, loading, reload } = useStaff<{ payments: Pending[] }>('payments?status=pending');
   const { busy, run } = useAction();
-  const [wa, setWa] = useState<{ link: string; name: string } | null>(null);
   const [rejecting, setRejecting] = useState<number | null>(null);
-  const [reason, setReason] = useState('Payment not found in bank statement');
+  const [reason, setReason] = useState('Not in bank statement');
   if (loading && !data) return <Spinner />;
   const list = data?.payments ?? [];
   return (
     <div className="space-y-3">
-      <p className="text-xs text-muted">Open your bank / UPI business app, find the reference and amount, then Verify. The booking confirms, the invoice is issued and the player gets WhatsApp.</p>
-      {wa && (
-        <a href={wa.link} target="_blank" rel="noopener noreferrer" onClick={() => setWa(null)} className="flex items-center justify-center gap-2 rounded-2xl py-3.5 font-bold bg-[#25D366] text-ink rise">
-          <WhatsAppIcon className="w-5 h-5" /> Send {wa.name} the confirmation
-        </a>
-      )}
+      <p className="text-xs text-muted">Bookings paid by UPI are confirmed straight away. Open your bank / UPI business app and tick each reference off. If one never arrived, “Not received” cancels that booking and its invoice and frees the slot.</p>
       {list.length === 0 ? (
-        <Empty>Nothing to verify. 🎉</Empty>
+        <Empty>All UPI payments are checked. 🎉</Empty>
       ) : (
-        list.map((p) => (
-          <div key={p.id} className="rounded-3xl border border-line bg-panel/70 p-4 space-y-3">
-            <div className="flex justify-between gap-3">
-              <div className="min-w-0">
-                <div className="font-semibold truncate">{p.name ?? 'Other income'} <span className="font-mono text-xs text-muted">{p.ref}</span></div>
-                <div className="text-xs text-soft">{p.booking_date ? fmtDate(p.booking_date) : ''}{p.phone ? ` · ${prettyMobile(p.phone)}` : ''}</div>
-                <div className="text-[11px] text-muted">{fmtStamp(p.created_at)} · by {p.created_by}{p.note ? ` · ${p.note}` : ''}</div>
-              </div>
-              <div className="text-right shrink-0">
-                <div className="font-display text-xl font-bold text-lime">{rupees(p.amount_paise)}</div>
-                <div className="text-xs uppercase text-soft font-semibold">{p.method}</div>
-              </div>
-            </div>
-            {p.reference && <div className="rounded-xl bg-night/70 border border-line px-3 py-2 font-mono text-lg tracking-widest text-center select-all">{p.reference}</div>}
-            {rejecting === p.id ? (
-              <div className="space-y-2">
-                <input className={inputCls} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={200} />
-                <div className="grid grid-cols-2 gap-2">
-                  <Btn onClick={() => setRejecting(null)}>Back</Btn>
-                  <Btn tone="bad" busy={busy} onClick={async () => { if (await run(() => staff(`payments/${p.id}/reject`, 'POST', { reason }), 'Rejected; slots released')) { setRejecting(null); void reload(); } }}>Reject & release</Btn>
+        list.map((p) => {
+          const pending = p.status === 'pending';
+          return (
+            <div key={p.id} className="rounded-3xl border border-line bg-panel/70 p-4 space-y-3">
+              <div className="flex justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="font-semibold truncate">{p.name ?? 'Other income'} <span className="font-mono text-xs text-muted">{p.ref}</span></div>
+                  <div className="text-xs text-soft">{p.booking_date ? fmtDate(p.booking_date) : ''}{p.phone ? ` · ${prettyMobile(p.phone)}` : ''}{p.booking_status && !pending ? ` · booking ${p.booking_status}` : ''}</div>
+                  <div className="text-[11px] text-muted">{fmtStamp(p.created_at)} · by {p.created_by}{p.note ? ` · ${p.note}` : ''}</div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className="font-display text-xl font-bold text-lime">{rupees(p.amount_paise)}</div>
+                  <div className="text-xs uppercase text-soft font-semibold">{p.method}</div>
                 </div>
               </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-2">
-                <Btn tone="bad" onClick={() => setRejecting(p.id)}><X className="w-4 h-4" /> Not received</Btn>
-                <Btn tone="ok" busy={busy} onClick={async () => {
-                  const r = await run(() => staff<{ waLink: string | null; waAuto: boolean }>(`payments/${p.id}/verify`, 'POST'), 'Verified — booking confirmed');
-                  if (r) {
-                    if (r.waLink && !r.waAuto) setWa({ link: r.waLink, name: p.name || 'player' });
-                    void reload();
-                  }
-                }}><Check className="w-4 h-4" /> Verify</Btn>
-              </div>
-            )}
-          </div>
-        ))
+              {p.reference && <div className="rounded-xl bg-night/70 border border-line px-3 py-2 font-mono text-lg tracking-widest text-center select-all">{p.reference}</div>}
+              {rejecting === p.id ? (
+                <div className="space-y-2">
+                  <input className={inputCls} value={reason} onChange={(e) => setReason(e.target.value)} maxLength={200} />
+                  <div className="grid grid-cols-2 gap-2">
+                    <Btn onClick={() => setRejecting(null)}>Back</Btn>
+                    <Btn tone="bad" busy={busy} onClick={async () => {
+                      const ok = await run(() => (pending ? staff(`payments/${p.id}/reject`, 'POST', { reason }) : staff(`payments/${p.id}/reconcile`, 'POST', { received: false, note: reason })), 'Not received — booking cancelled, slot freed');
+                      if (ok) { setRejecting(null); void reload(); }
+                    }}>Cancel booking</Btn>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <Btn tone="bad" onClick={() => setRejecting(p.id)}><X className="w-4 h-4" /> Not received</Btn>
+                  <Btn tone="ok" busy={busy} onClick={async () => {
+                    const ok = await run(() => (pending ? staff(`payments/${p.id}/verify`, 'POST') : staff(`payments/${p.id}/reconcile`, 'POST', { received: true })), 'Ticked off');
+                    if (ok) void reload();
+                  }}><Check className="w-4 h-4" /> Seen in bank</Btn>
+                </div>
+              )}
+            </div>
+          );
+        })
       )}
     </div>
   );
@@ -154,7 +156,7 @@ function Overview() {
             <Stat label="Collected" value={rupees(s.totals.income - s.totals.refunds)} tone="text-lime" sub={s.totals.refunds ? `after ${rupees(s.totals.refunds)} refunds` : `${s.totals.bookings} bookings`} />
             <Stat label="Expenses" value={rupees(s.totals.expenses)} tone="text-pink" />
             <Stat label="Profit" value={rupees(s.totals.net)} tone={s.totals.net >= 0 ? 'text-ok' : 'text-bad'} />
-            <Stat label="To verify" value={rupees(s.pending.amount)} tone="text-amber" sub={`${s.pending.n} payments`} />
+            <Stat label="To check" value={rupees(s.pending.amount)} tone="text-amber" sub={`${s.pending.n} UPI payments`} />
           </div>
           <Card title="Month by month">
             {s.months.length === 0 ? <p className="text-sm text-muted">No money moved in this period.</p> : (

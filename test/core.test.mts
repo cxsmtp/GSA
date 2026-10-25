@@ -78,16 +78,32 @@ describe('bookings', () => {
   test('a slot outside opening hours is refused', () => {
     assert.throws(() => createBooking({ ...base, slots: [{ spaceId: 1, start: 2 * 60 }] }), /does not exist/);
   });
-  test('UPI reference → verify → confirmed with one invoice; a UTR works once', async () => {
+  test('UPI reference confirms at once with one invoice; a UTR works once; "not received" undoes it', async () => {
+    const { reconcilePayment } = await import('../src/lib/server/payments.ts');
     const b = createBooking({ ...base, slots: [{ spaceId: 1, start: 9 * 60 }] });
-    const p = submitUtr(b, '412345678901');
-    assert.equal(bookingById(b.id)!.status, 'submitted');
-    const other = createBooking({ ...base, phone: '919829033333', slots: [{ spaceId: 1, start: 10 * 60 }] });
-    assert.throws(() => submitUtr(other, '412345678901'), /already used/);
-    await verifyPayment(p.id, 'admin');
-    await verifyPayment(p.id, 'admin');
+    const p = await submitUtr(b, '412345678901');
     assert.equal(bookingById(b.id)!.status, 'confirmed');
     assert.equal(all('SELECT * FROM invoices WHERE booking_id = ?', b.id).length, 1);
+    const other = createBooking({ ...base, phone: '919829033333', slots: [{ spaceId: 1, start: 10 * 60 }] });
+    await assert.rejects(() => submitUtr(other, '412345678901'), /already used/);
+    reconcilePayment(p.id, false, 'Not in bank statement', 'admin');
+    assert.equal(bookingById(b.id)!.status, 'cancelled');
+    assert.equal(get<{ status: string }>('SELECT status FROM invoices WHERE booking_id = ?', b.id)!.status, 'cancelled');
+    assert.equal(get<{ n: number }>('SELECT COUNT(*) AS n FROM booking_slots WHERE booking_id = ?', b.id)!.n, 0, 'slots released');
+    const ok = await submitUtr(other, '412345678902');
+    reconcilePayment(ok.id, true, '', 'admin');
+    assert.equal(bookingById(other.id)!.status, 'confirmed');
+  });
+  test('the player tells the manager on WhatsApp once booked', async () => {
+    const { playerBookedLink } = await import('../src/lib/server/whatsapp.ts');
+    saveSettings('business', { ...getSettings('business'), whatsapp: '919829012345' }, 'test');
+    const b = createBooking({ ...base, phone: '919829044444', name: 'Asha Rao', slots: [{ spaceId: 2, start: 11 * 60 }] });
+    assert.equal(playerBookedLink(b), null, 'nothing to tell before paying');
+    await submitUtr(b, '412345678903');
+    const msg = decodeURIComponent(playerBookedLink(bookingById(b.id)!)!);
+    assert.match(msg, /^https:\/\/wa\.me\/919829012345\?text=Hi! I'm booked/);
+    assert.match(msg, /Asha Rao/);
+    assert.match(msg, /UPI ref 412345678903/);
   });
   test('invoice numbers run on without gaps', () => {
     saveSettings('business', { ...getSettings('business'), stateCode: '08', state: 'State 08' }, 'test');

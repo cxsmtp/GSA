@@ -42,7 +42,10 @@ export function summary(from: string, to: string) {
     `SELECT category, SUM(amount_paise) AS amount FROM expenses WHERE deleted_at IS NULL AND date BETWEEN ? AND ? GROUP BY category ORDER BY amount DESC`, from, to);
   const byChannel = all<{ channel: string; n: number; amount: number }>(
     `SELECT channel, COUNT(*) AS n, SUM(amount_paise) AS amount FROM bookings WHERE status='confirmed' AND date BETWEEN ? AND ? GROUP BY channel ORDER BY n DESC`, from, to);
-  const pending = get<{ n: number; amount: number | null }>("SELECT COUNT(*) AS n, SUM(amount_paise) AS amount FROM payments WHERE status='pending' AND direction='in' AND (method <> 'razorpay' OR reference <> '')")!;
+  // To check: UPI not yet ticked off against the bank, and anything still pending.
+  const pending = get<{ n: number; amount: number | null }>(
+    "SELECT COUNT(*) AS n, SUM(amount_paise) AS amount FROM payments WHERE direction='in' AND ((status='pending' AND (method <> 'razorpay' OR reference <> '')) OR (status='verified' AND method='upi' AND reconciled_at IS NULL))",
+  )!;
   return { months: list, totals, byMethod, byCategory, expenseByCategory, byChannel, pending: { n: pending.n, amount: pending.amount ?? 0 } };
 }
 

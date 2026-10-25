@@ -17,7 +17,7 @@ interface Dash {
   collectedToday?: number;
   upcoming: number;
   threshold?: { turnover: number; threshold: number; pct: number; registered: boolean; fy: string };
-  integrations?: { razorpay: boolean; whatsappApi: boolean; razorpayWebhook: boolean };
+  integrations?: { razorpay: boolean; razorpayWebhook: boolean };
   cashOnName?: number;
   cashTakenToday?: number;
   pendingDeposits?: number;
@@ -38,9 +38,9 @@ export function TodayTab({ go }: { go: (t: 'money' | 'bookings' | 'cash') => voi
       </div>
 
       {admin && (data.pendingPayments ?? 0) > 0 && (
-        <button onClick={() => go('money')} className="w-full flex items-center gap-3 rounded-3xl border border-violet/50 bg-violet/15 p-4 text-left pulse">
+        <button onClick={() => go('money')} className="w-full flex items-center gap-3 rounded-3xl border border-violet/50 bg-violet/15 p-4 text-left">
           <span className="grid place-items-center w-10 h-10 rounded-2xl bg-violet text-white font-display font-bold">{data.pendingPayments}</span>
-          <span className="flex-1"><b>Payments to verify</b><br /><span className="text-xs text-soft">Check the UPI reference in your bank app, then tap Verify</span></span>
+          <span className="flex-1"><b>UPI payments to check</b><br /><span className="text-xs text-soft">Bookings are confirmed — tick each reference off in your bank app</span></span>
           <ChevronRight className="w-5 h-5" />
         </button>
       )}
@@ -71,9 +71,6 @@ export function TodayTab({ go }: { go: (t: 'money' | 'bookings' | 'cash') => voi
           <AlertTriangle className="w-5 h-5 text-amber shrink-0" />
           <span>FY {data.threshold.fy} receipts are {rupees(data.threshold.turnover)} — {data.threshold.pct}% of the GST registration limit ({rupees(data.threshold.threshold)}). Talk to your CA about registering.</span>
         </div>
-      )}
-      {admin && data.integrations && !data.integrations.whatsappApi && (
-        <p className="text-[11px] text-muted">WhatsApp confirmations are sent with one tap from each booking (free). Automatic sending can be switched on in Settings.</p>
       )}
 
       <Card title="Today's bookings" action={<button onClick={() => go('bookings')} className="text-xs text-cyan font-semibold">All bookings</button>}>

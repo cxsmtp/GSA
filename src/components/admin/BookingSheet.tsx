@@ -76,7 +76,7 @@ export function BookingSheet({ id, onClose, onChanged }: { id: number | null; on
             {b.gstin && <div className="text-xs text-muted">GSTIN {b.gstin}</div>}
             {b.note && <div className="text-xs text-amber">{b.note}</div>}
             {b.cancelReason && <div className="text-xs text-bad">Cancelled: {b.cancelReason}</div>}
-            {b.status !== 'confirmed' && b.waOpened && <div className="text-xs text-ok">Player opened WhatsApp to confirm (code {b.code})</div>}
+            {b.source === 'online' && b.waOpened && <div className="text-xs text-ok">Player sent the manager a WhatsApp</div>}
           </div>
 
           {d.payments.length > 0 && (

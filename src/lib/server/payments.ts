@@ -5,19 +5,19 @@ import { audit } from './audit';
 import { bookingById, extendHold, reclaimSlots, setStatus, sweepExpired, type BookingRow } from './bookings';
 import { all, get, isUniqueViolation, run, tx } from './db';
 import { HttpError } from './http';
-import { invoiceForBooking } from './invoices';
+import { cancelInvoice, invoiceForBooking } from './invoices';
 import { logEvent } from './log';
 import { getSettings, integrations } from './settings';
 import { safeEqual } from './secrets';
-import { sendAutomaticConfirmation } from './whatsapp';
 
 /**
  * Collecting money.
  *
  * Direct UPI (free, no gateway): the pay page opens the player's UPI app (Google Pay, PhonePe, Paytm,
  * BHIM…) with the business's UPI ID and the exact amount filled in, or shows the same as a QR code to
- * scan. The player then types the 12-digit UPI reference (UTR); the admin checks it against the
- * bank app and taps Verify. A UTR can be used for one booking only.
+ * scan. The player types the 12-digit UPI reference (UTR) and the booking is confirmed at once; a UTR
+ * works for one booking only. The admin later ticks each UPI payment off against the bank
+ * (reconcilePayment); one that never arrived cancels its booking and invoice.
  *
  * Razorpay (optional, automatic): with RAZORPAY_KEY_ID/SECRET set, "Pay instantly" opens Razorpay
  * Checkout (UPI intent to the installed apps, QR, cards). The booking confirms only on Razorpay's
@@ -43,6 +43,8 @@ export interface PaymentRow {
   created_at: string;
   verified_by: string | null;
   verified_at: string | null;
+  reconciled_at: string | null;
+  reconciled_by: string | null;
 }
 
 export function upiLink(amountPaise: number, ref: string): string | null {
@@ -60,8 +62,8 @@ export function upiLink(amountPaise: number, ref: string): string | null {
 
 export const UTR_RE = /^[0-9]{12}$/;
 
-/** The player says they paid by UPI: record the reference for the admin to verify. */
-export function submitUtr(b: BookingRow, utrRaw: string, now = Date.now()): PaymentRow {
+/** The player paid by UPI and gives the reference: the booking is confirmed straight away. */
+export async function submitUtr(b: BookingRow, utrRaw: string, now = Date.now()): Promise<PaymentRow> {
   const utr = utrRaw.replace(/\s/g, '');
   if (!UTR_RE.test(utr)) throw new HttpError(400, 'Enter the 12-digit UPI reference number (UTR) from your payment app.');
   sweepExpired(now);
@@ -74,27 +76,52 @@ export function submitUtr(b: BookingRow, utrRaw: string, now = Date.now()): Paym
   }
   // Paid just after the hold ran out: take the spaces back if they are still free.
   if (fresh.status === 'expired') reclaimSlots(fresh);
-  return tx(() => {
+  const payment = tx(() => {
     let id: number;
     try {
       id = run(
-        `INSERT INTO payments (booking_id, category, method, amount_paise, reference, status, date, created_by, created_at) VALUES (?,?,?,?,?,?,?,?,?)`,
-        b.id, 'space', 'upi', fresh.amount_paise, utr, 'pending', todayIst(now), 'player', new Date(now).toISOString(),
+        `INSERT INTO payments (booking_id, category, method, amount_paise, reference, status, date, created_by, created_at, verified_by, verified_at)
+         VALUES (?,?,?,?,?,'verified',?,?,?,?,?)`,
+        b.id, 'space', 'upi', fresh.amount_paise, utr, todayIst(now), 'player', new Date(now).toISOString(), 'player', new Date(now).toISOString(),
       ).lastId;
     } catch (err) {
       if (isUniqueViolation(err)) throw new HttpError(409, 'This UPI reference was already used for another booking. Please check the number.');
       throw err;
     }
-    setStatus(b.id, 'submitted');
-    audit('player', 'payment.submit_utr', 'booking', fresh.ref, { payment: id, amount: fresh.amount_paise });
+    audit('player', 'payment.upi', 'booking', fresh.ref, { payment: id, amount: fresh.amount_paise, reference: utr });
     return get<PaymentRow>('SELECT * FROM payments WHERE id = ?', id)!;
   });
+  await confirmPaidBooking(b.id, 'player');
+  return payment;
 }
 
 /**
- * Paid and checked: confirm the booking, issue its invoice, send the WhatsApp confirmation.
- * Safe to call twice.
+ * The admin's tick against the bank for a UPI payment that already confirmed its booking.
+ * Received: done. Not received: the payment is rejected, the booking cancelled (slots released) and
+ * its invoice cancelled.
  */
+export function reconcilePayment(paymentId: number, received: boolean, note: string, actor: string) {
+  const p = get<PaymentRow>('SELECT * FROM payments WHERE id = ?', paymentId);
+  if (!p) throw new HttpError(404, 'Payment not found.');
+  if (p.reconciled_at) throw new HttpError(409, 'Already checked.');
+  tx(() => {
+    if (received) {
+      run('UPDATE payments SET reconciled_at = ?, reconciled_by = ? WHERE id = ?', new Date().toISOString(), actor, p.id);
+      audit(actor, 'payment.reconciled', 'payment', p.id, { amount: p.amount_paise, reference: p.reference });
+      return;
+    }
+    run("UPDATE payments SET status = 'rejected', note = ?, reconciled_at = ?, reconciled_by = ? WHERE id = ?", note, new Date().toISOString(), actor, p.id);
+    if (p.booking_id) {
+      const b = bookingById(p.booking_id)!;
+      if (b.status !== 'cancelled') setStatus(b.id, 'cancelled', { cancelReason: `Payment not received: ${note}` });
+      const inv = get<{ id: number }>("SELECT id FROM invoices WHERE booking_id = ? AND status = 'issued'", b.id);
+      if (inv) cancelInvoice(inv.id, `Payment not received: ${note}`, actor);
+    }
+    audit(actor, 'payment.not_received', 'payment', p.id, { amount: p.amount_paise, reference: p.reference, note });
+  });
+}
+
+/** Paid: confirm the booking and issue its invoice. Safe to call twice. */
 export async function confirmPaidBooking(bookingId: number, actor: string): Promise<BookingRow> {
   const b = bookingById(bookingId);
   if (!b) throw new HttpError(404, 'Booking not found.');
@@ -106,9 +133,7 @@ export async function confirmPaidBooking(bookingId: number, actor: string): Prom
       audit(actor, 'booking.confirm', 'booking', b.ref, { amount: b.amount_paise });
     });
   }
-  const done = bookingById(bookingId)!;
-  if (!done.wa_sent_at) void sendAutomaticConfirmation(done).catch(() => {});
-  return done;
+  return bookingById(bookingId)!;
 }
 
 export async function verifyPayment(paymentId: number, actor: string) {
@@ -159,6 +184,8 @@ export interface RecordInput {
   note: string;
   verified: boolean;
   actor: string;
+  /** Already matched to the bank (the admin's own entries); UPI from anyone else waits for the admin's tick. */
+  reconciled?: boolean;
   /** Cash only: who took it, and who answers for it until it is deposited (src/lib/server/cash.ts). */
   collectedBy?: string;
   custodian?: string;
@@ -167,12 +194,14 @@ export interface RecordInput {
 export function recordPayment(i: RecordInput): PaymentRow {
   if (i.amount <= 0) throw new HttpError(400, 'Amount must be more than zero.');
   try {
+    const reconciled = i.verified && (i.reconciled ?? i.method !== 'upi');
     const id = run(
-      `INSERT INTO payments (direction, booking_id, invoice_id, category, method, amount_paise, reference, status, date, note, created_by, created_at, verified_by, verified_at, collected_by, custodian)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO payments (direction, booking_id, invoice_id, category, method, amount_paise, reference, status, date, note, created_by, created_at, verified_by, verified_at, collected_by, custodian, reconciled_at, reconciled_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       i.direction, i.bookingId ?? null, i.invoiceId ?? null, i.category, i.method, i.amount, i.reference, i.verified ? 'verified' : 'pending', i.date, i.note, i.actor,
       new Date().toISOString(), i.verified ? i.actor : null, i.verified ? new Date().toISOString() : null,
       i.method === 'cash' ? (i.collectedBy ?? i.actor) : null, i.method === 'cash' ? (i.custodian ?? i.actor) : null,
+      reconciled ? new Date().toISOString() : null, reconciled ? i.actor : null,
     ).lastId;
     audit(i.actor, i.direction === 'refund' ? 'payment.refund' : 'payment.record', 'payment', id, { amount: i.amount, method: i.method, booking: i.bookingId ?? null, verified: i.verified, ...(i.method === 'cash' ? { custodian: i.custodian ?? i.actor } : {}) });
     return get<PaymentRow>('SELECT * FROM payments WHERE id = ?', id)!;
@@ -242,8 +271,9 @@ export async function settleRazorpay(orderId: string, paymentId: string, via: 'c
     if (pay.status === 'authorized') await rz(`payments/${encodeURIComponent(paymentId)}/capture`, { method: 'POST', body: JSON.stringify({ amount: pay.amount, currency: 'INR' }) });
     else if (pay.status !== 'captured') throw new HttpError(402, 'The payment has not completed yet.');
     const changed = run(
-      "UPDATE payments SET status = 'verified', reference = ?, gateway_payment_id = ?, verified_by = ?, verified_at = ? WHERE id = ? AND status <> 'verified'",
-      paymentId, paymentId, `razorpay:${via}`, new Date().toISOString(), p.id,
+      // The gateway's word is the bank check: nothing left for the admin to tick off.
+      "UPDATE payments SET status = 'verified', reference = ?, gateway_payment_id = ?, verified_by = ?, verified_at = ?, reconciled_at = ?, reconciled_by = ? WHERE id = ? AND status <> 'verified'",
+      paymentId, paymentId, `razorpay:${via}`, new Date().toISOString(), new Date().toISOString(), 'razorpay', p.id,
     ).changes;
     if (changed) audit(`razorpay:${via}`, 'payment.verify', 'payment', p.id, { amount: p.amount_paise, paymentId });
   }

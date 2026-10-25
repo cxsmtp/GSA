@@ -1,10 +1,9 @@
 import { rupees } from '@/lib/shared/money';
-import { playerConfirmMessage, waMeLink } from '@/lib/shared/whatsapp';
 import { fmtDate } from '@/lib/shared/time';
 import { slotsLabel, slotsOf, sweepExpired, type BookingRow } from './bookings';
 import { get } from './db';
 import { razorpayOn, upiLink } from './payments';
-import { payStateOf } from './whatsapp';
+import { payStateOf, playerBookedLink } from './whatsapp';
 import { ensureFirstAdmin } from './auth';
 import { getSettings, integrations } from './settings';
 import type { PublicConfig } from '@/lib/shared/types';
@@ -67,8 +66,9 @@ export function publicBooking(b: BookingRow) {
     razorpay: razorpayOn() && (fresh.status === 'held' || fresh.status === 'reserved'),
     payState: payStateOf(fresh).payState,
     phoneBooking: fresh.source === 'desk',
-    whatsappConfirm: waMeLink(a.whatsapp, playerConfirmMessage(fresh.ref, fresh.confirm_code)),
-    waAuto: integrations().whatsappApi,
+    // After an online booking is paid: one tap opens the player's WhatsApp with "I'm booked" to the manager.
+    tellManager: fresh.source === 'online' ? playerBookedLink(fresh) : null,
+    toldManager: Boolean(fresh.wa_opened_at),
     invoice: invoice ? { token: invoice.token, number: invoice.number } : null,
     business: { name: a.name, phone: a.phone, whatsapp: a.whatsapp, mapUrl: a.mapUrl, address: a.address },
   };
